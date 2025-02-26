@@ -90,7 +90,7 @@ This is a modern, feature-rich Shopify storefront built with SvelteKit, designed
 
 ```bash
 # Clone the repository
-git clone https://your-repo-url.git
+git clone [https://your-repo-url.git](https://github.com/rflatti/generator)
 
 # Navigate to project directory
 cd shopify-storefront
