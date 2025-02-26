@@ -259,7 +259,7 @@ const FEATURED_PRODUCTS_QUERY = `#graphql
     $language: LanguageCode
     $first: Int
   ) @inContext(country: $country, language: $language) {
-    products(first: $first, sortKey: FEATURED) {
+    products(first: $first, sortKey: BEST_SELLING) {
       nodes {
         ...ProductCard
       }
