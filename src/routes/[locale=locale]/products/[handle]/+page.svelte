@@ -1,460 +1,504 @@
-<!-- src/routes/[locale=locale]/cart/+page.svelte -->
 <script>
-    import { onMount } from 'svelte';
-    import { browser } from '$app/environment';
-    import { page } from '$app/stores';
     import { i18n } from '$lib/i18n/translations';
-    import { formatMoney } from '$lib/utils/money';
-    import { createClientStorefront } from '$lib/api/storefront.client';
-    import { createCartHandler, cartGetIdDefault, cartSetIdDefault } from '$lib/api/cart';
-    import { createCartHelper, cart } from '$lib/stores/cart';
-    import Link from '$lib/components/Link.svelte';
+    import { formatMoney, isDiscounted, calculateDiscountPercentage } from '$lib/utils/money';
+    import { generateProductSeo } from '$lib/utils/seo';
+    import { page } from '$app/stores';
+    import { onMount } from 'svelte';
+    import AddToCartButton from "$lib/components/AddToCartButton.svelte";
 
     export let data;
 
-    // Get translations
+    // Get translation function
     $: t = $i18n.t;
 
-    // Cart state
-    let cartHandler;
-    let cartHelper;
-    let isLoading = true;
-    let discountCode = '';
-    let discountError = '';
+    // Extract product data
+    $: product = data.product;
+    $: variants = product?.variants?.nodes || [];
+    $: options = product?.options || [];
+    $: selectedVariant = product?.selectedVariant || variants[0];
+    $: media = product?.media?.nodes || [];
+    $: recommendations = data.recommendations || [];
 
-    // Initialize cart
-    onMount(async () => {
-        if (browser) {
-            // Create client-side storefront
-            const { storefront } = createClientStorefront({
-                i18n: data.locale ? {
-                    country: data.locale.country,
-                    language: data.locale.language
-                } : undefined
-            });
+    // Selected options state
+    let selectedOptions = {};
 
-            // Create cart handler
-            cartHandler = createCartHandler({
-                storefront,
-                getCartId: cartGetIdDefault(),
-                setCartId: cartSetIdDefault()
-            });
+    // Quantity state
+    let quantity = 1;
 
-            // Create cart helper
-            cartHelper = createCartHelper(cartHandler);
+    // Active image state
+    let activeImageIndex = 0;
 
-            // Fetch cart data
-            await cartHandler.get();
-            isLoading = false;
+    // Generate SEO data
+    $: seo = generateProductSeo({
+        product,
+        selectedVariant,
+        url: $page.url.href,
+        siteName: data.shop?.name || 'Shopify Store'
+    });
+
+    // Initialize selected options from URL or default to first values
+    onMount(() => {
+        if (options.length > 0) {
+            // Initialize with the selected variant's options if available
+            if (selectedVariant) {
+                selectedVariant.selectedOptions.forEach(opt => {
+                    selectedOptions[opt.name] = opt.value;
+                });
+            } else {
+                // Otherwise use first options
+                options.forEach(option => {
+                    selectedOptions[option.name] = option.values[0];
+                });
+            }
         }
     });
 
-    // Handle remove item
-    async function removeItem(lineId) {
-        if (cartHelper) {
-            isLoading = true;
-            try {
-                const result = await cartHelper.removeLine(lineId);
-                if (!result) {
-                    console.error('Failed to remove item');
-                }
-                // Get fresh cart data to ensure UI is in sync
-                await cartHandler.get();
-            } catch (error) {
-                console.error('Error removing item:', error);
-            } finally {
-                isLoading = false;
-            }
-        }
+    // Update quantity
+    function updateQuantity(val) {
+        quantity = Math.max(1, val);
     }
 
-    // Handle quantity change
-    async function updateQuantity(lineId, newQuantity) {
-        if (newQuantity < 1) {
-            return removeItem(lineId);
-        }
+    // Handle option change
+    function handleOptionChange(optionName, value) {
+        selectedOptions = {
+            ...selectedOptions,
+            [optionName]: value
+        };
 
-        if (cartHelper) {
-            isLoading = true;
-            try {
-                const result = await cartHelper.updateLineQuantity(lineId, newQuantity);
-                if (!result) {
-                    console.error('Failed to update quantity');
-                }
-                // Get fresh cart data to ensure UI is in sync
-                await cartHandler.get();
-            } catch (error) {
-                console.error('Error updating quantity:', error);
-            } finally {
-                isLoading = false;
-            }
-        }
+        // Update URL with new selected options
+        const params = new URLSearchParams($page.url.searchParams);
+        Object.entries(selectedOptions).forEach(([name, value]) => {
+            params.set(name.toLowerCase(), value);
+        });
+
+        const newUrl = `${$page.url.pathname}?${params}`;
+        history.replaceState(null, '', newUrl);
     }
 
-    // Apply discount code
-    async function applyDiscount() {
-        if (!discountCode || !cartHelper) return;
+    // Find variant by selected options
+    $: currentVariant = selectedOptions
+        ? variants.find(variant =>
+        variant.selectedOptions.every(
+            opt => selectedOptions[opt.name] === opt.value
+        )
+    ) || selectedVariant
+        : selectedVariant;
 
-        isLoading = true;
-        discountError = '';
+    // Price display
+    $: price = currentVariant?.price;
+    $: compareAtPrice = currentVariant?.compareAtPrice;
+    $: hasDiscount = isDiscounted(price, compareAtPrice);
+    $: discountPercentage = hasDiscount
+        ? calculateDiscountPercentage(compareAtPrice, price)
+        : 0;
 
-        try {
-            const success = await cartHelper.applyDiscount(discountCode);
-            if (!success) {
-                discountError = t('cart.discountError');
-            } else {
-                discountCode = '';
-            }
-        } catch (error) {
-            console.error('Error applying discount:', error);
-            discountError = t('cart.discountError');
-        } finally {
-            isLoading = false;
+    // Handle add to cart
+    async function addToCart() {
+        if (!currentVariant || !currentVariant.availableForSale) {
+            return;
         }
+
+        // In a real implementation, you would call your cart API here
+        console.log('Adding to cart:', {
+            variantId: currentVariant.id,
+            quantity
+        });
+
+        // Show some feedback to the user
+        alert(t('product.addedToCart'));
     }
-
-    // Remove discount code
-    async function removeDiscount(code) {
-        if (!cartHelper) return;
-
-        isLoading = true;
-        try {
-            await cartHelper.removeDiscount(code);
-        } catch (error) {
-            console.error('Error removing discount:', error);
-        } finally {
-            isLoading = false;
-        }
-    }
-
-    // Clear cart
-    async function clearCart() {
-        if (cartHelper) {
-            isLoading = true;
-            await cartHelper.clearCart();
-            isLoading = false;
-        }
-    }
-
-    // Format cart line
-    function formatLine(line) {
-        if (!line) return null;
-        return cartHelper ? cartHelper.formatCartLine(line) : null;
-    }
-
-    // Get checkout URL
-    $: checkoutUrl = $cart?.checkoutUrl;
-
-    // Go to checkout
-    function goToCheckout() {
-        if (checkoutUrl) {
-            window.location.href = checkoutUrl;
-        }
-    }
-
-    // Get cart lines, subtotal, discounts
-    $: lines = $cart?.lines?.edges || [];
-    $: subtotal = $cart?.cost?.subtotalAmount;
-    $: total = $cart?.cost?.totalAmount;
-    $: tax = $cart?.cost?.totalTaxAmount;
-    $: discounts = $cart?.discountCodes || [];
-    $: appliedDiscounts = discounts.filter(d => d.applicable);
-    $: isEmpty = lines.length === 0;
 </script>
 
 <svelte:head>
-    <title>{t('cart.title')} | {t('site.title')}</title>
+    <title>{seo.title}</title>
+    <meta name="description" content={seo.description} />
+    <meta property="og:title" content={seo.openGraph.title} />
+    <meta property="og:description" content={seo.openGraph.description} />
+    <meta property="og:type" content={seo.openGraph.type} />
+    <meta property="og:url" content={seo.openGraph.url} />
+    {#if seo.openGraph.images && seo.openGraph.images[0]}
+        <meta property="og:image" content={seo.openGraph.images[0].url} />
+    {/if}
+    <meta name="twitter:card" content={seo.twitter.card} />
+    <meta name="twitter:title" content={seo.twitter.title} />
+    <meta name="twitter:description" content={seo.twitter.description} />
+    {#if seo.twitter.image}
+        <meta name="twitter:image" content={seo.twitter.image} />
+    {/if}
+    <link rel="canonical" href={seo.canonical} />
 </svelte:head>
 
-<div class="cart-page">
-    <h1>{t('cart.title')}</h1>
+<div class="product-page">
+    <nav class="breadcrumbs">
+        <a href={`/${data.locale.country}-${data.locale.language}`}>{t('nav.home')}</a>
+        <span>&rsaquo;</span>
+        <a href={`/${data.locale.country}-${data.locale.language}/products`}>{t('nav.products')}</a>
+        <span>&rsaquo;</span>
+        <span>{product.title}</span>
+    </nav>
 
-    {#if isLoading}
-        <div class="loading">
-            <p>{t('message.loading')}</p>
-        </div>
-    {:else if isEmpty}
-        <div class="empty-cart">
-            <p>{t('cart.empty')}</p>
-            <div class="cart-actions">
-                <Link href="/" className="button secondary">{t('cart.continue')}</Link>
+    <div class="product-container">
+        <!-- Product Images -->
+        <div class="product-images">
+            <div class="main-image">
+                {#if media.length > 0}
+                    {#if media[activeImageIndex].__typename === 'MediaImage'}
+                        <img
+                                src={media[activeImageIndex].image.url}
+                                alt={media[activeImageIndex].alt || product.title}
+                                width={media[activeImageIndex].image.width}
+                                height={media[activeImageIndex].image.height}
+                        />
+                    {/if}
+                {:else if currentVariant?.image}
+                    <img
+                            src={currentVariant.image.url}
+                            alt={currentVariant.image.altText || product.title}
+                            width={currentVariant.image.width}
+                            height={currentVariant.image.height}
+                    />
+                {/if}
             </div>
-        </div>
-    {:else}
-        <div class="cart-container">
-            <div class="cart-items">
-                <table class="cart-table">
-                    <thead>
-                    <tr>
-                        <th>{t('cart.product')}</th>
-                        <th>{t('cart.price')}</th>
-                        <th>{t('cart.quantity')}</th>
-                        <th>{t('cart.total')}</th>
-                        <th></th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {#each lines as { node }}
-                        {@const item = formatLine(node)}
-                        {#if item}
-                            <tr class="cart-item">
-                                <td class="product-cell">
-                                    <Link href="/products/{item.product.handle}" className="product-link">
-                                        <div class="product-image">
-                                            {#if item.variant.image}
-                                                <img
-                                                        src={item.variant.image.url}
-                                                        alt={item.variant.image.altText || item.product.title}
-                                                        width="80"
-                                                        height="80"
-                                                />
-                                            {:else}
-                                                <div class="placeholder-image"></div>
-                                            {/if}
-                                        </div>
-                                        <div class="product-info">
-                                            <h3>{item.product.title}</h3>
-                                            {#if item.variant.title !== 'Default Title'}
-                                                <p class="variant-title">{item.variant.title}</p>
-                                            {/if}
-                                        </div>
-                                    </Link>
-                                </td>
-                                <td class="price-cell">
-                                    {formatMoney(item.variant.price)}
-                                </td>
-                                <td class="quantity-cell">
-                                    <div class="quantity-controls">
-                                        <button
-                                                on:click={() => updateQuantity(item.id, item.quantity - 1)}
-                                                aria-label="Decrease quantity"
-                                        >
-                                            -
-                                        </button>
-                                        <input
-                                                type="number"
-                                                min="1"
-                                                value={item.quantity}
-                                                on:input={(e) => updateQuantity(item.id, parseInt(e.target.value) || 1)}
-                                                aria-label="Quantity"
-                                        />
-                                        <button
-                                                on:click={() => updateQuantity(item.id, item.quantity + 1)}
-                                                aria-label="Increase quantity"
-                                        >
-                                            +
-                                        </button>
-                                    </div>
-                                </td>
-                                <td class="total-cell">
-                                    {formatMoney(item.cost.total)}
-                                </td>
-                                <td class="action-cell">
-                                    <button class="remove-button" on:click={() => removeItem(item.id)}>
-                                        {t('cart.remove')}
-                                    </button>
-                                </td>
-                            </tr>
+
+            {#if media.length > 1}
+                <div class="thumbnail-gallery">
+                    {#each media as item, index}
+                        {#if item.__typename === 'MediaImage'}
+                            <button
+                                    class="thumbnail {activeImageIndex === index ? 'active' : ''}"
+                                    on:click={() => activeImageIndex = index}
+                            >
+                                <img
+                                        src={item.image.url}
+                                        alt={item.alt || product.title}
+                                        width="80"
+                                        height="80"
+                                />
+                            </button>
                         {/if}
                     {/each}
-                    </tbody>
-                </table>
+                </div>
+            {/if}
+        </div>
 
-                <div class="cart-actions">
-                    <button class="button secondary" on:click={clearCart}>
-                        {t('cart.clear')}
-                    </button>
-                    <Link href="/" className="button secondary">
-                        {t('cart.continue')}
-                    </Link>
+        <!-- Product Info -->
+        <div class="product-info">
+            <h1>{product.title}</h1>
+
+            {#if product.vendor}
+                <div class="vendor">{product.vendor}</div>
+            {/if}
+
+            <div class="price-container">
+                {#if hasDiscount}
+                    <div class="price sale">
+                        {formatMoney(price)}
+                        <span class="compare-at">{formatMoney(compareAtPrice)}</span>
+                        <span class="discount-badge">-{discountPercentage}%</span>
+                    </div>
+                {:else}
+                    <div class="price">{formatMoney(price)}</div>
+                {/if}
+            </div>
+
+            <!-- Product Options -->
+            {#if options.length > 0}
+                <div class="product-options">
+                    {#each options as option}
+                        <div class="option-group">
+                            <label for={option.name}>{option.name}</label>
+                            <div class="option-values">
+                                {#each option.values as value}
+                                    <button
+                                            class="option-value {selectedOptions[option.name] === value ? 'selected' : ''}"
+                                            on:click={() => handleOptionChange(option.name, value)}
+                                    >
+                                        {value}
+                                    </button>
+                                {/each}
+                            </div>
+                        </div>
+                    {/each}
+                </div>
+            {/if}
+
+            <!-- Quantity Selector -->
+            <div class="quantity-selector">
+                <label for="quantity">{t('product.quantity')}</label>
+                <div class="quantity-controls">
+                    <button on:click={() => updateQuantity(quantity - 1)} aria-label="Decrease quantity">-</button>
+                    <input
+                            id="quantity"
+                            type="number"
+                            min="1"
+                            bind:value={quantity}
+                            on:input={(e) => updateQuantity(parseInt(e.target.value))}
+                    />
+                    <button on:click={() => updateQuantity(quantity + 1)} aria-label="Increase quantity">+</button>
                 </div>
             </div>
 
-            <div class="cart-sidebar">
-                <div class="cart-summary">
-                    <h2>{t('cart.summary')}</h2>
+            <!-- Add to Cart Button -->
+            <AddToCartButton
+                    variantId={currentVariant?.id}
+                    quantity={quantity}
+                    disabled={!currentVariant || !currentVariant.availableForSale}
+                    showQuantity={false}
+                    locale={data.locale}
+                    fullWidth={true}
+            />
 
-                    <!-- Discount Code -->
-                    <div class="discount-section">
-                        <h3>{t('cart.discount')}</h3>
-                        <div class="discount-form">
-                            <input
-                                    type="text"
-                                    bind:value={discountCode}
-                                    placeholder={t('cart.discountPlaceholder') || "Enter discount code"}
-                                    on:keydown={(e) => e.key === 'Enter' && applyDiscount()}
-                            />
-                            <button class="button secondary" on:click={applyDiscount}>
-                                {t('cart.applyDiscount') || "Apply"}
-                            </button>
-                        </div>
-                        {#if discountError}
-                            <p class="discount-error">{discountError}</p>
-                        {/if}
+            <!-- Product Description -->
+            {#if product.descriptionHtml}
+                <div class="product-description">
+                    <h2>{t('product.description')}</h2>
+                    {@html product.descriptionHtml}
+                </div>
+            {/if}
+        </div>
+    </div>
 
-                        {#if appliedDiscounts.length > 0}
-                            <div class="applied-discounts">
-                                {#each appliedDiscounts as discount}
-                                    <div class="discount-tag">
-                                        <span>{discount.code}</span>
-                                        <button on:click={() => removeDiscount(discount.code)}>×</button>
-                                    </div>
-                                {/each}
+    <!-- Recommendations -->
+    {#if recommendations.length > 0}
+        <div class="recommendations">
+            <h2>{t('product.related')}</h2>
+            <div class="recommendations-grid">
+                {#each recommendations as rec}
+                    <a
+                            href={`/${data.locale.country}-${data.locale.language}/products/${rec.handle}`}
+                            class="recommendation-card"
+                    >
+                        {#if rec.variants?.nodes[0]?.image}
+                            <div class="recommendation-image">
+                                <img
+                                        src={rec.variants.nodes[0].image.url}
+                                        alt={rec.variants.nodes[0].image.altText || rec.title}
+                                        width="150"
+                                        height="150"
+                                        loading="lazy"
+                                />
                             </div>
                         {/if}
-                    </div>
-
-                    <!-- Summary -->
-                    <div class="summary-item">
-                        <span>{t('cart.subtotal')}</span>
-                        <span>{formatMoney(subtotal)}</span>
-                    </div>
-
-                    {#if tax}
-                        <div class="summary-item">
-                            <span>{t('cart.tax')}</span>
-                            <span>{formatMoney(tax)}</span>
+                        <div class="recommendation-info">
+                            <h3>{rec.title}</h3>
+                            {#if rec.variants?.nodes[0]?.price}
+                                <div class="recommendation-price">
+                                    {formatMoney(rec.variants.nodes[0].price)}
+                                </div>
+                            {/if}
                         </div>
-                    {/if}
-
-                    <div class="summary-item total">
-                        <span>{t('cart.total')}</span>
-                        <span>{formatMoney(total)}</span>
-                    </div>
-
-                    <!-- Checkout Button -->
-                    <button class="checkout-button" on:click={goToCheckout}>
-                        {t('cart.checkout')}
-                    </button>
-                </div>
+                    </a>
+                {/each}
             </div>
         </div>
     {/if}
 </div>
 
 <style>
-    .cart-page {
+    .product-page {
         max-width: 1200px;
         margin: 0 auto;
         padding: 1rem;
     }
 
-    h1 {
+    .breadcrumbs {
         margin-bottom: 2rem;
-        font-size: 2rem;
+        font-size: 0.9rem;
     }
 
-    .loading, .empty-cart {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 3rem 0;
-        text-align: center;
+    .breadcrumbs a {
+        color: #666;
+        text-decoration: none;
     }
 
-    .empty-cart p {
-        margin-bottom: 1.5rem;
-        font-size: 1.1rem;
+    .breadcrumbs a:hover {
+        text-decoration: underline;
+    }
+
+    .breadcrumbs span {
+        margin: 0 0.5rem;
         color: #666;
     }
 
-    .cart-container {
+    .product-container {
         display: grid;
-        grid-template-columns: 1fr 350px;
+        grid-template-columns: 1fr 1fr;
         gap: 2rem;
+        margin-bottom: 3rem;
     }
 
     @media (max-width: 768px) {
-        .cart-container {
+        .product-container {
             grid-template-columns: 1fr;
         }
     }
 
-    .cart-table {
-        width: 100%;
-        border-collapse: collapse;
-    }
-
-    .cart-table th {
-        text-align: left;
-        padding: 1rem 0.5rem;
-        border-bottom: 2px solid #eee;
-        font-weight: bold;
-    }
-
-    .cart-table td {
-        padding: 1rem 0.5rem;
-        border-bottom: 1px solid #eee;
-        vertical-align: middle;
-    }
-
-    .product-cell {
-        width: 50%;
-    }
-
-    .product-link {
+    .product-images {
         display: flex;
-        text-decoration: none;
-        color: inherit;
+        flex-direction: column;
     }
 
-    .product-image {
-        width: 80px;
-        height: 80px;
-        margin-right: 1rem;
+    .main-image {
+        width: 100%;
+        aspect-ratio: 1 / 1;
         border: 1px solid #eee;
         border-radius: 4px;
         overflow: hidden;
-        flex-shrink: 0;
+        margin-bottom: 1rem;
     }
 
-    .product-image img {
+    .main-image img {
         width: 100%;
         height: 100%;
         object-fit: cover;
     }
 
-    .placeholder-image {
-        width: 100%;
-        height: 100%;
-        background-color: #f5f5f5;
+    .thumbnail-gallery {
+        display: flex;
+        gap: 0.5rem;
+        overflow-x: auto;
+        padding-bottom: 0.5rem;
     }
 
-    .product-info h3 {
-        margin: 0 0 0.25rem;
+    .thumbnail {
+        width: 80px;
+        height: 80px;
+        border: 1px solid #eee;
+        border-radius: 4px;
+        overflow: hidden;
+        padding: 0;
+        cursor: pointer;
+        background: none;
+    }
+
+    .thumbnail.active {
+        border-color: #333;
+    }
+
+    .thumbnail img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .product-info {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .product-info h1 {
+        font-size: 2rem;
+        margin: 0;
+    }
+
+    .vendor {
+        color: #666;
         font-size: 1rem;
     }
 
-    .variant-title {
-        margin: 0;
-        font-size: 0.875rem;
+    .price-container {
+        margin-bottom: 0.5rem;
+    }
+
+    .price {
+        font-size: 1.5rem;
+        font-weight: bold;
+    }
+
+    .price.sale {
+        color: #e53e3e;
+    }
+
+    .compare-at {
+        text-decoration: line-through;
         color: #666;
+        font-size: 1rem;
+        margin-left: 0.5rem;
+    }
+
+    .discount-badge {
+        background-color: #e53e3e;
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 2px;
+        font-size: 0.875rem;
+        margin-left: 0.5rem;
+    }
+
+    .product-options {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .option-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .option-group label {
+        font-weight: bold;
+    }
+
+    .option-values {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .option-value {
+        padding: 0.5rem 1rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background: white;
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+
+    .option-value.selected {
+        border-color: #333;
+        background-color: #333;
+        color: white;
+    }
+
+    .quantity-selector {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .quantity-selector label {
+        font-weight: bold;
     }
 
     .quantity-controls {
         display: flex;
-        align-items: center;
         border: 1px solid #ddd;
         border-radius: 4px;
+        overflow: hidden;
         width: fit-content;
     }
 
     .quantity-controls button {
         background: #f5f5f5;
         border: none;
-        width: 30px;
-        height: 30px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        padding: 0.5rem 1rem;
         cursor: pointer;
+        font-size: 1rem;
+    }
+
+    .quantity-controls button:hover {
+        background: #e5e5e5;
     }
 
     .quantity-controls input {
-        width: 40px;
+        width: 50px;
         border: none;
         text-align: center;
+        font-size: 1rem;
+        padding: 0.5rem;
         -moz-appearance: textfield;
     }
 
@@ -464,130 +508,9 @@
         margin: 0;
     }
 
-    .remove-button {
-        background: none;
-        border: none;
-        color: #666;
-        text-decoration: underline;
-        cursor: pointer;
-    }
-
-    .cart-actions {
-        display: flex;
-        gap: 1rem;
-        margin-top: 1.5rem;
-    }
-
-    .button {
-        padding: 0.75rem 1.5rem;
-        border-radius: 4px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s;
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .button.secondary {
-        background-color: #f5f5f5;
-        color: #333;
-        border: 1px solid #ddd;
-    }
-
-    .button.secondary:hover {
-        background-color: #eee;
-    }
-
-    .cart-sidebar {
-        position: sticky;
-        top: 2rem;
-        align-self: start;
-    }
-
-    .cart-summary {
-        background-color: #f9f9f9;
-        border-radius: 8px;
-        padding: 1.5rem;
-    }
-
-    .cart-summary h2 {
-        margin: 0 0 1.5rem;
-        font-size: 1.25rem;
-    }
-
-    .discount-section {
-        margin-bottom: 1.5rem;
-    }
-
-    .discount-section h3 {
-        font-size: 1rem;
-        margin: 0 0 0.5rem;
-    }
-
-    .discount-form {
-        display: flex;
-        gap: 0.5rem;
-    }
-
-    .discount-form input {
-        flex: 1;
-        padding: 0.5rem;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-    }
-
-    .discount-error {
-        color: #e53e3e;
-        font-size: 0.875rem;
-        margin: 0.5rem 0 0;
-    }
-
-    .applied-discounts {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        margin-top: 0.5rem;
-    }
-
-    .discount-tag {
-        display: flex;
-        align-items: center;
-        background: #eee;
-        padding: 0.25rem 0.5rem;
-        border-radius: 4px;
-        font-size: 0.875rem;
-    }
-
-    .discount-tag button {
-        background: none;
-        border: none;
-        margin-left: 0.25rem;
-        cursor: pointer;
-        font-size: 1rem;
-        line-height: 1;
-    }
-
-    .summary-item {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 0.5rem;
-        padding: 0.5rem 0;
-    }
-
-    .summary-item.total {
-        font-weight: bold;
-        font-size: 1.1rem;
-        border-top: 1px solid #ddd;
-        margin-top: 1rem;
-        padding-top: 1rem;
-    }
-
-    .checkout-button {
-        width: 100%;
-        padding: 0.75rem;
-        background: #4a4a4a;
+    .add-to-cart {
+        padding: 1rem 2rem;
+        background-color: #4a4a4a;
         color: white;
         border: none;
         border-radius: 4px;
@@ -595,10 +518,79 @@
         font-weight: bold;
         cursor: pointer;
         transition: background-color 0.2s;
-        margin-top: 1rem;
     }
 
-    .checkout-button:hover {
-        background: #333;
+    .add-to-cart:hover {
+        background-color: #333;
+    }
+
+    .add-to-cart.disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+    }
+
+    .product-description {
+        margin-top: 2rem;
+        font-size: 0.95rem;
+        line-height: 1.6;
+    }
+
+    .product-description h2 {
+        font-size: 1.25rem;
+        margin-bottom: 1rem;
+    }
+
+    .recommendations {
+        margin-top: 3rem;
+    }
+
+    .recommendations h2 {
+        font-size: 1.5rem;
+        margin-bottom: 1.5rem;
+        text-align: center;
+    }
+
+    .recommendations-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .recommendation-card {
+        border: 1px solid #eee;
+        border-radius: 4px;
+        overflow: hidden;
+        text-decoration: none;
+        color: inherit;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .recommendation-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .recommendation-image {
+        aspect-ratio: 1;
+        overflow: hidden;
+    }
+
+    .recommendation-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .recommendation-info {
+        padding: 1rem;
+    }
+
+    .recommendation-info h3 {
+        margin: 0 0 0.5rem;
+        font-size: 1rem;
+    }
+
+    .recommendation-price {
+        font-weight: bold;
     }
 </style>

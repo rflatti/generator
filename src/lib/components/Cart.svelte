@@ -56,7 +56,7 @@
             try {
                 const result = await cartHelper.removeLine(lineId);
                 if (!result) {
-                    console.error('Failed to remove item');
+                    console.error('Failed to remove item', result);
                 }
                 // Get fresh cart data to ensure UI is in sync
                 await cartHandler.get();
@@ -79,7 +79,7 @@
             try {
                 const result = await cartHelper.updateLineQuantity(lineId, newQuantity);
                 if (!result) {
-                    console.error('Failed to update quantity');
+                    console.error('Failed to update quantity', result);
                 }
                 // Get fresh cart data to ensure UI is in sync
                 await cartHandler.get();

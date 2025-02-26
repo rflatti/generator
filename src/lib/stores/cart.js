@@ -209,6 +209,7 @@ export function createCartHelper(api) {
 
             if (result && result.cart) {
                 // Directly update the cart store with the returned cart data
+                console.log('Update line result:', result);
                 cart.set(result.cart);
             }
 
@@ -227,7 +228,7 @@ export function createCartHelper(api) {
 
         try {
             const result = await api.removeLines([lineId]);
-
+            console.log('Remove line result:', result);
             if (result && result.cart) {
                 // Directly update the cart store with the returned cart data
                 cart.set(result.cart);

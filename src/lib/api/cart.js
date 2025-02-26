@@ -330,24 +330,40 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
         const cartId = getCartId();
 
         if (!cartId) {
+            console.error('No cart ID available for updateLines');
             throw new Error('No cart ID available');
         }
 
+        console.log(`updateLines: Updating lines in cart ${cartId}:`, lines);
+        console.log('updateLines: Using storefront API:', storefront);
+
         try {
-            const { cartLinesUpdate } = await storefront.query(UPDATE_LINES_MUTATION, {
-                variables: {
-                    cartId,
-                    lines
-                },
+            console.log('updateLines: Preparing to call Storefront API');
+
+            const variables = {
+                cartId,
+                lines
+            };
+
+            console.log('updateLines: API call variables:', variables);
+            console.log('updateLines: Using query:', UPDATE_LINES_MUTATION.substring(0, 100) + '...');
+
+            const result = await storefront.query(UPDATE_LINES_MUTATION, {
+                variables,
                 cache: CacheNone()
             });
 
+            console.log('updateLines: API call successful, result:', result);
+
+            const { cartLinesUpdate } = result;
             const cart = cartLinesUpdate?.cart;
 
             if (!cart) {
+                console.error('updateLines: Failed to update cart lines - no cart in response');
                 throw new Error('Failed to update cart lines');
             }
 
+            console.log('updateLines: Cart updated successfully');
             updateCartStore(cart);
 
             return {
@@ -355,7 +371,7 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
                 errors: cartLinesUpdate.userErrors
             };
         } catch (error) {
-            console.error('Error updating cart lines:', error);
+            console.error('updateLines: Error updating cart lines:', error);
             throw error;
         }
     }
@@ -365,26 +381,43 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
      */
     async function removeLines(lineIds) {
         const cartId = getCartId();
+        console.log('Remove Line cart id', cartId);
 
         if (!cartId) {
+            console.error('removeLines: No cart ID available');
             throw new Error('No cart ID available');
         }
 
+        console.log(`removeLines: Removing lines from cart ${cartId}:`, lineIds);
+        console.log('removeLines: Using storefront API:', storefront);
+
         try {
-            const { cartLinesRemove } = await storefront.query(REMOVE_LINES_MUTATION, {
-                variables: {
-                    cartId,
-                    lineIds
-                },
+            console.log('removeLines: Preparing to call Storefront API');
+
+            const variables = {
+                cartId,
+                lineIds
+            };
+
+            console.log('removeLines: API call variables:', variables);
+            console.log('removeLines: Using query:', REMOVE_LINES_MUTATION.substring(0, 100) + '...');
+
+            const result = await storefront.query(REMOVE_LINES_MUTATION, {
+                variables,
                 cache: CacheNone()
             });
 
+            console.log('removeLines: API call successful, result:', result);
+
+            const { cartLinesRemove } = result;
             const cart = cartLinesRemove?.cart;
 
             if (!cart) {
+                console.error('removeLines: Failed to remove cart lines - no cart in response');
                 throw new Error('Failed to remove cart lines');
             }
 
+            console.log('removeLines: Cart updated successfully');
             updateCartStore(cart);
 
             return {
@@ -392,7 +425,7 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
                 errors: cartLinesRemove.userErrors
             };
         } catch (error) {
-            console.error('Error removing cart lines:', error);
+            console.error('removeLines: Error removing cart lines:', error);
             throw error;
         }
     }
@@ -498,12 +531,32 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
 export function cartGetIdDefault(cookies) {
     if (browser) {
         return () => {
-            return document.cookie.split('; ').find(row => row.startsWith(`${CART_COOKIE}=`))?.split('=')[1];
+            const cookieValue = document.cookie
+                .split('; ')
+                .find(row => row.startsWith(`${CART_COOKIE}=`))
+                ?.split('=')[1]
+                ?.split('?')[0];
+
+            console.info('cookieValue', cookieValue);
+
+
+            if (cookieValue) {
+                const decodedCartId = decodeURIComponent(cookieValue);
+                console.log('Getting cart ID from browser cookie:', decodedCartId);
+                return decodedCartId;
+            }
+            return null;
         };
     }
 
     return () => {
-        return cookies.get(CART_COOKIE);
+        const cookieValue = cookies.get(CART_COOKIE);
+        if (cookieValue) {
+            const decodedCartId = decodeURIComponent(cookieValue);
+            console.log('Getting cart ID from server cookies:', decodedCartId);
+            return decodedCartId;
+        }
+        return null;
     };
 }
 
@@ -512,12 +565,22 @@ export function cartGetIdDefault(cookies) {
  */
 export function cartSetIdDefault(cookies) {
     return (cartId) => {
+        if (!cartId) return;
+
+        console.log('Setting cart ID cookie:', cartId);
+
+        // Here's the problem - the cart ID contains characters like ; and = which
+        // can cause issues with cookies. We need to encode it properly.
+        const safeCartId = encodeURIComponent(cartId);
+
         if (browser) {
-            document.cookie = `${CART_COOKIE}=${cartId}; path=/; max-age=${60 * 60 * 24 * 14}`; // 14 days
+            document.cookie = `${CART_COOKIE}=${safeCartId}; path=/; max-age=${60 * 60 * 24 * 14}`; // 14 days
+            // Verify the cookie was set correctly
+            console.log('Cookie set. Current cookies:', document.cookie);
             return;
         }
 
-        cookies.set(CART_COOKIE, cartId, {
+        cookies.set(CART_COOKIE, safeCartId, {
             path: '/',
             maxAge: 60 * 60 * 24 * 14, // 14 days
             httpOnly: true,

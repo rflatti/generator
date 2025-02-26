@@ -68,11 +68,14 @@ export class ClientStorefrontAPI {
 
     /**
      * Execute a Storefront API query
+     /**
+     * Update the query method in src/lib/api/storefront.client.js to fix the cacheKey issue
      */
     async query(query, { variables = {}, cache = CacheLong() } = {}) {
         const url = `${this.domain}/api/${this.apiVersion}/graphql.json`;
         const options = this.createFetchOptions(query, { variables, cache });
 
+        // Generate a cache key (this was missing)
         const cacheKey = browser && cache.mode !== 'no-store' ?
             `${query}${JSON.stringify(variables)}` : null;
 
@@ -82,15 +85,19 @@ export class ClientStorefrontAPI {
         }
 
         try {
+            console.log('Sending request to Shopify API...');
             const response = await fetch(url, options);
 
             if (!response.ok) {
+                console.error('Shopify API error status:', response.status, response.statusText);
                 throw new Error(`Shopify API error: ${response.statusText}`);
             }
 
             const json = await response.json();
+            console.log('Received response from Shopify API', json);
 
             if (json.errors) {
+                console.error('Shopify GraphQL errors:', json.errors);
                 throw new Error(
                     `Shopify GraphQL error: ${json.errors.map(e => e.message).join(', ')}`
                 );
