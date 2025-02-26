@@ -53,18 +53,8 @@
     async function removeItem(lineId) {
         if (cartHelper) {
             isLoading = true;
-            try {
-                const result = await cartHelper.removeLine(lineId);
-                if (!result) {
-                    console.error('Failed to remove item');
-                }
-                // Get fresh cart data to ensure UI is in sync
-                await cartHandler.get();
-            } catch (error) {
-                console.error('Error removing item:', error);
-            } finally {
-                isLoading = false;
-            }
+            await cartHelper.removeLine(lineId);
+            isLoading = false;
         }
     }
 
@@ -76,18 +66,8 @@
 
         if (cartHelper) {
             isLoading = true;
-            try {
-                const result = await cartHelper.updateLineQuantity(lineId, newQuantity);
-                if (!result) {
-                    console.error('Failed to update quantity');
-                }
-                // Get fresh cart data to ensure UI is in sync
-                await cartHandler.get();
-            } catch (error) {
-                console.error('Error updating quantity:', error);
-            } finally {
-                isLoading = false;
-            }
+            await cartHelper.updateLineQuantity(lineId, newQuantity);
+            isLoading = false;
         }
     }
 

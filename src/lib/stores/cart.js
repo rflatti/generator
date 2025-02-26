@@ -1,5 +1,8 @@
 /**
- * Cart store for SvelteKit Shopify storefront
+ * Updated cart store for SvelteKit Shopify storefront
+ *
+ * This is an update to src/lib/stores/cart.js to ensure it properly integrates
+ * with the Shopify Storefront API cart functionality.
  */
 
 import { writable, derived } from 'svelte/store';
@@ -7,6 +10,9 @@ import { browser } from '$app/environment';
 
 // Create the base cart store
 export const cart = writable(null);
+
+// Create cart drawer state
+export const isCartOpen = writable(false);
 
 // Derive helpful cart properties
 export const cartQuantity = derived(cart, ($cart) => {
@@ -41,13 +47,16 @@ export const cartDiscounts = derived(cart, ($cart) => {
 
 export const isCartEmpty = derived(cartQuantity, ($quantity) => $quantity === 0);
 
-export const isCartOpen = writable(false);
-
 /**
  * Open the cart drawer/modal
  */
 export function openCart() {
     isCartOpen.set(true);
+
+    // Add body class to prevent scrolling
+    if (browser) {
+        document.body.classList.add('cart-open');
+    }
 }
 
 /**
@@ -55,13 +64,30 @@ export function openCart() {
  */
 export function closeCart() {
     isCartOpen.set(false);
+
+    // Remove body class to re-enable scrolling
+    if (browser) {
+        document.body.classList.remove('cart-open');
+    }
 }
 
 /**
  * Toggle the cart drawer/modal
  */
 export function toggleCart() {
-    isCartOpen.update(value => !value);
+    isCartOpen.update(value => {
+        const newValue = !value;
+
+        if (browser) {
+            if (newValue) {
+                document.body.classList.add('cart-open');
+            } else {
+                document.body.classList.remove('cart-open');
+            }
+        }
+
+        return newValue;
+    });
 }
 
 /**
@@ -120,17 +146,31 @@ export function createCartHelper(api) {
     // Subscribe to the API's cart store
     if (browser && api.cartStore) {
         const unsubscribe = api.cartStore.subscribe($cart => {
-            cart.set($cart);
+            // Only update the store if we have a valid cart
+            if ($cart) {
+                console.log('Updated cart store:', $cart);
+                cart.set($cart);
+            }
+        });
+
+        // Ensure we have the latest cart data
+        api.get().catch(err => {
+            console.error('Error fetching initial cart:', err);
         });
     }
 
     async function addToCart(merchandiseId, quantity = 1, attributes = []) {
+        if (!merchandiseId) {
+            console.error('Error adding to cart: No merchandiseId provided');
+            return false;
+        }
+
         const formattedAttributes = Array.isArray(attributes)
             ? attributes
             : Object.entries(attributes).map(([key, value]) => ({ key, value }));
 
         try {
-            await api.addLines([
+            const result = await api.addLines([
                 {
                     merchandiseId,
                     quantity,
@@ -138,10 +178,15 @@ export function createCartHelper(api) {
                 }
             ]);
 
-            // Open cart drawer after adding item
-            openCart();
+            if (result && result.cart) {
+                // Directly update the cart store with the returned cart data
+                cart.set(result.cart);
+            } else {
+                // Fallback to getting the cart if the result doesn't include it
+                await api.get();
+            }
 
-            return true;
+            return !result.errors || result.errors.length === 0;
         } catch (error) {
             console.error('Error adding to cart:', error);
             return false;
@@ -149,15 +194,25 @@ export function createCartHelper(api) {
     }
 
     async function updateLineQuantity(lineId, quantity) {
+        if (!lineId) {
+            console.error('Error updating line: No lineId provided');
+            return false;
+        }
+
         try {
-            await api.updateLines([
+            const result = await api.updateLines([
                 {
                     id: lineId,
                     quantity
                 }
             ]);
 
-            return true;
+            if (result && result.cart) {
+                // Directly update the cart store with the returned cart data
+                cart.set(result.cart);
+            }
+
+            return !result.errors || result.errors.length === 0;
         } catch (error) {
             console.error('Error updating cart line:', error);
             return false;
@@ -165,9 +220,20 @@ export function createCartHelper(api) {
     }
 
     async function removeLine(lineId) {
+        if (!lineId) {
+            console.error('Error removing line: No lineId provided');
+            return false;
+        }
+
         try {
-            await api.removeLines([lineId]);
-            return true;
+            const result = await api.removeLines([lineId]);
+
+            if (result && result.cart) {
+                // Directly update the cart store with the returned cart data
+                cart.set(result.cart);
+            }
+
+            return !result.errors || result.errors.length === 0;
         } catch (error) {
             console.error('Error removing cart line:', error);
             return false;
@@ -175,6 +241,11 @@ export function createCartHelper(api) {
     }
 
     async function applyDiscount(discountCode) {
+        if (!discountCode) {
+            console.error('Error applying discount: No code provided');
+            return false;
+        }
+
         try {
             const currentCart = await api.get();
             const currentCodes = currentCart?.discountCodes || [];
@@ -182,7 +253,8 @@ export function createCartHelper(api) {
 
             // Add the new discount code if it's not already there
             if (!currentCodeValues.includes(discountCode)) {
-                await api.updateDiscountCodes([...currentCodeValues, discountCode]);
+                const result = await api.updateDiscountCodes([...currentCodeValues, discountCode]);
+                return !result.errors || result.errors.length === 0;
             }
 
             return true;
@@ -193,6 +265,11 @@ export function createCartHelper(api) {
     }
 
     async function removeDiscount(discountCode) {
+        if (!discountCode) {
+            console.error('Error removing discount: No code provided');
+            return false;
+        }
+
         try {
             const currentCart = await api.get();
             const currentCodes = currentCart?.discountCodes || [];
@@ -200,8 +277,8 @@ export function createCartHelper(api) {
                 .map(discount => discount.code)
                 .filter(code => code !== discountCode);
 
-            await api.updateDiscountCodes(updatedCodes);
-            return true;
+            const result = await api.updateDiscountCodes(updatedCodes);
+            return !result.errors || result.errors.length === 0;
         } catch (error) {
             console.error('Error removing discount:', error);
             return false;
@@ -217,7 +294,8 @@ export function createCartHelper(api) {
             const lineIds = lines.map(edge => edge.node.id);
 
             if (lineIds.length > 0) {
-                await api.removeLines(lineIds);
+                const result = await api.removeLines(lineIds);
+                return !result.errors || result.errors.length === 0;
             }
 
             return true;

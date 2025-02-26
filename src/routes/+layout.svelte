@@ -1,3 +1,4 @@
+<!-- Updated +layout.svelte file to include cart components -->
 <script>
     import { page } from '$app/stores';
     import { onMount } from 'svelte';
@@ -5,6 +6,8 @@
     import { MULTILINGUAL, parseLocaleFromUrl, DEFAULT_LOCALE } from '$lib/i18n/config';
     import { createClientStorefront } from '$lib/api/storefront.client';
     import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
+    import Cart from '$lib/components/Cart.svelte';
+    import { cartQuantity, openCart } from '$lib/stores/cart';
     import { browser } from '$app/environment';
 
     export let data;
@@ -46,6 +49,11 @@
             setLocale(DEFAULT_LOCALE.country, DEFAULT_LOCALE.language);
         }
     });
+
+    // Handle cart icon click
+    function handleCartClick() {
+        openCart();
+    }
 </script>
 
 <div class="app">
@@ -75,7 +83,18 @@
                     <LocaleSwitcher />
                 {/if}
 
-                <!-- Account and Cart links would go here -->
+                <!-- Cart button -->
+                <button class="cart-button" on:click={handleCartClick}>
+                    <span class="cart-icon">🛒</span>
+                    {#if $cartQuantity > 0}
+                        <span class="cart-count">{$cartQuantity}</span>
+                    {/if}
+                </button>
+
+                <!-- Cart Link -->
+                <a href={MULTILINGUAL ? `/${data.locale.country}-${data.locale.language}/cart` : '/cart'} class="cart-link">
+                    Cart
+                </a>
             </div>
         </nav>
     </header>
@@ -87,6 +106,9 @@
     <footer>
         <p>&copy; {new Date().getFullYear()} Shopify Store. All rights reserved.</p>
     </footer>
+
+    <!-- Cart component -->
+    <Cart locale={data.locale} />
 </div>
 
 <style>
@@ -137,6 +159,43 @@
     .right-menu {
         display: flex;
         align-items: center;
+        gap: 1rem;
+    }
+
+    .cart-button {
+        background: none;
+        border: none;
+        cursor: pointer;
+        position: relative;
+        padding: 0.5rem;
+        font-size: 1.25rem;
+    }
+
+    .cart-count {
+        position: absolute;
+        top: 0;
+        right: 0;
+        background-color: #e53e3e;
+        color: white;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        font-size: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .cart-link {
+        text-decoration: none;
+        color: #333;
+        display: none;
+    }
+
+    @media (min-width: 768px) {
+        .cart-link {
+            display: block;
+        }
     }
 
     main {
