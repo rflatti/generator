@@ -1,10 +1,12 @@
-<!-- Updated +layout.svelte file to include cart components -->
+<!-- Update to src/routes/+layout.svelte -->
 <script>
     import { page } from '$app/stores';
     import { onMount } from 'svelte';
     import { setLocale } from '$lib/i18n/translations';
     import { MULTILINGUAL, parseLocaleFromUrl, DEFAULT_LOCALE } from '$lib/i18n/config';
     import { createClientStorefront } from '$lib/api/storefront.client';
+    import { createCustomerAPI, customerTokenGetDefault, customerTokenSetDefault, customerTokenRemoveDefault } from '$lib/api/customer';
+    import { createCustomerHelper, isLoggedIn } from '$lib/stores/customer';
     import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
     import Cart from '$lib/components/Cart.svelte';
     import { cartQuantity, openCart } from '$lib/stores/cart';
@@ -12,7 +14,9 @@
 
     export let data;
 
-    // Initialize client-side storefront (only in browser)
+    // Initialize client-side storefront and customer API
+    let customerHelper;
+
     onMount(() => {
         if (browser) {
             try {
@@ -23,7 +27,21 @@
                     } : undefined
                 });
 
-                // You could store this in a writable store if needed elsewhere
+                // Initialize customer API
+                const customerAPI = createCustomerAPI({
+                    storefront,
+                    getCustomerToken: customerTokenGetDefault(),
+                    setCustomerToken: customerTokenSetDefault(),
+                    removeCustomerToken: customerTokenRemoveDefault()
+                });
+
+                // Create customer helper and get customer data if logged in
+                customerHelper = createCustomerHelper(customerAPI);
+                if (customerAPI.isLoggedIn()) {
+                    customerAPI.getCustomer().catch(err => {
+                        console.error('Error fetching customer data:', err);
+                    });
+                }
             } catch (err) {
                 console.error('Error initializing client storefront:', err);
             }
@@ -82,6 +100,19 @@
                 {#if MULTILINGUAL}
                     <LocaleSwitcher />
                 {/if}
+
+                <!-- Account links -->
+                <div class="account-menu">
+                    {#if $isLoggedIn}
+                        <a href={MULTILINGUAL ? `/${data.locale.country}-${data.locale.language}/account` : '/account'} class="account-link">
+                            My Account
+                        </a>
+                    {:else}
+                        <a href={MULTILINGUAL ? `/${data.locale.country}-${data.locale.language}/account/login` : '/account/login'} class="account-link">
+                            Login
+                        </a>
+                    {/if}
+                </div>
 
                 <!-- Cart button -->
                 <button class="cart-button" on:click={handleCartClick}>
@@ -160,6 +191,15 @@
         display: flex;
         align-items: center;
         gap: 1rem;
+    }
+
+    .account-menu {
+        margin-right: 0.5rem;
+    }
+
+    .account-link {
+        text-decoration: none;
+        color: #333;
     }
 
     .cart-button {
