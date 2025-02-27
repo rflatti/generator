@@ -8,6 +8,7 @@
     import { createClientStorefront } from '$lib/api/storefront.client';
     import { createCartHandler, cartGetIdDefault, cartSetIdDefault } from '$lib/api/cart';
     import { createCartHelper, isCartOpen, cartQuantity, cart, closeCart, cartError, cartOperationResult } from '$lib/stores/cart';
+    import {goto} from "$app/navigation";
 
     // Props
     export let locale = undefined;
@@ -148,6 +149,11 @@
         } else if (cartHelper) {
             cartHelper.setResult(false, t('cart.checkoutUnavailable'));
         }
+    }
+
+    //Go to cart page
+    function goToCart(){
+        return goto('/cart');
     }
 
     // Get cart lines, subtotal, discounts
@@ -305,6 +311,18 @@
                             disabled={updateInProgress || $cartQuantity === 0}
                     >
                         {t('cart.checkout')}
+                    </button>
+                    <span>
+                        <center>
+                            {t('general.or')}
+                        </center>
+                    </span>
+                    <button
+                            class="checkout-button"
+                            on:click={goToCart()}
+                            disabled={updateInProgress || $cartQuantity === 0}
+                    >
+                        {t('cart.cartpage')}
                     </button>
                 </div>
             {/if}

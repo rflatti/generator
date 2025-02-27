@@ -5,6 +5,10 @@
     import { page } from '$app/stores';
     import { onMount } from 'svelte';
     import AddToCartButton from "$lib/components/AddToCartButton.svelte";
+    import WishlistButton from "$lib/components/WishlistButton.svelte";
+    import { createClientStorefront } from '$lib/api/storefront.client';
+    import { createCustomerAPI, customerTokenGetDefault, customerTokenSetDefault, customerTokenRemoveDefault } from '$lib/api/customer';
+    import { createCustomerMetafieldsAPI } from '$lib/api/customer-metafields';
 
     export let data;
 
@@ -27,6 +31,7 @@
 
     // Active image state
     let activeImageIndex = 0;
+    let shopifyAPI = null;
 
     // Generate SEO data
     $: seo = generateProductSeo({
@@ -51,6 +56,23 @@
                 });
             }
         }
+
+        const { storefront } = createClientStorefront({
+            i18n: data.locale ? {
+                country: data.locale.country,
+                language: data.locale.language
+            } : undefined
+        });
+
+        // Create customer API
+        const customerAPI = createCustomerAPI({
+            storefront,
+            getCustomerToken: customerTokenGetDefault(),
+            setCustomerToken: customerTokenSetDefault(),
+            removeCustomerToken: customerTokenRemoveDefault()
+        });
+
+        shopifyAPI = createCustomerMetafieldsAPI(customerAPI, storefront);
     });
 
     // Update quantity
@@ -246,6 +268,17 @@
                     showQuantity={false}
                     locale={data.locale}
                     fullWidth={true}
+            />
+            <WishlistButton
+                    variantId={currentVariant?.id}
+                    productTitle={product.title}
+                    productHandle={product.handle}
+                    variantTitle={currentVariant?.title}
+                    variantImage={currentVariant?.image}
+                    price={currentVariant?.price}
+                    compareAtPrice={currentVariant?.compareAtPrice}
+                    shopifyAPI={shopifyAPI}
+                    buttonOnly={true}
             />
 
             <!-- Product Description -->

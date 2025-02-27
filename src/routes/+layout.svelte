@@ -6,7 +6,9 @@
     import { MULTILINGUAL, parseLocaleFromUrl, DEFAULT_LOCALE } from '$lib/i18n/config';
     import { createClientStorefront } from '$lib/api/storefront.client';
     import { createCustomerAPI, customerTokenGetDefault, customerTokenSetDefault, customerTokenRemoveDefault } from '$lib/api/customer';
+    import { createCustomerMetafieldsAPI } from '$lib/api/customer-metafields';
     import { createCustomerHelper, isLoggedIn } from '$lib/stores/customer';
+    import { wishlistCount, initWishlist } from '$lib/stores/wishlist';
     import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
     import Cart from '$lib/components/Cart.svelte';
     import { cartQuantity, openCart } from '$lib/stores/cart';
@@ -16,6 +18,7 @@
 
     // Initialize client-side storefront and customer API
     let customerHelper;
+    let shopifyAPI;
 
     onMount(() => {
         if (browser) {
@@ -35,6 +38,9 @@
                     removeCustomerToken: customerTokenRemoveDefault()
                 });
 
+                // Add metafields API
+                shopifyAPI = createCustomerMetafieldsAPI(customerAPI, storefront);
+
                 // Create customer helper and get customer data if logged in
                 customerHelper = createCustomerHelper(customerAPI);
                 if (customerAPI.isLoggedIn()) {
@@ -42,6 +48,9 @@
                         console.error('Error fetching customer data:', err);
                     });
                 }
+
+                // Initialize wishlist
+                initWishlist(shopifyAPI);
             } catch (err) {
                 console.error('Error initializing client storefront:', err);
             }
@@ -100,7 +109,13 @@
                 {#if MULTILINGUAL}
                     <LocaleSwitcher />
                 {/if}
-
+                <!-- Wishlist link -->
+                <a href={MULTILINGUAL ? `/${data.locale.country}-${data.locale.language}/account/wishlist` : '/account/wishlist'} class="wishlist-link">
+                    <span class="wishlist-icon">❤️</span>
+                    {#if $wishlistCount > 0}
+                        <span class="wishlist-count">{$wishlistCount}</span>
+                    {/if}
+                </a>
                 <!-- Account links -->
                 <div class="account-menu">
                     {#if $isLoggedIn}
@@ -121,11 +136,6 @@
                         <span class="cart-count">{$cartQuantity}</span>
                     {/if}
                 </button>
-
-                <!-- Cart Link -->
-                <a href={MULTILINGUAL ? `/${data.locale.country}-${data.locale.language}/cart` : '/cart'} class="cart-link">
-                    Cart
-                </a>
             </div>
         </nav>
     </header>

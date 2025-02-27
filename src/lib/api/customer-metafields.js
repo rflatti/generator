@@ -198,11 +198,52 @@ export function createCustomerMetafieldsAPI(customerAPI, storefront) {
         }
     }
 
+    /**
+     * Get or create customer metafield
+     * @param {Object} metafield - Metafield data {namespace, key, defaultValue, type}
+     * @returns {Object} Result with metafield data
+     */
+    async function getOrCreateCustomerMetafield({ namespace, key, defaultValue = '[]', type = 'json_string' }) {
+        if (!customerAPI.isLoggedIn()) {
+            return { success: false, errors: [{ message: 'Customer not logged in' }] };
+        }
+
+        try {
+            // Try to get existing metafield
+            const metafields = await getCustomerMetafields([
+                { namespace, key }
+            ]);
+
+            // If metafield exists, return it
+            if (metafields && metafields.length > 0) {
+                return {
+                    success: true,
+                    metafield: metafields[0]
+                };
+            }
+
+            // If not, create it with default value
+            return await updateCustomerMetafield({
+                namespace,
+                key,
+                value: defaultValue,
+                type
+            });
+        } catch (error) {
+            console.error('Error getting or creating metafield:', error);
+            return {
+                success: false,
+                errors: [{ message: error.message || 'Unknown error with metafield' }]
+            };
+        }
+    }
+
     // Return the extended API
     return {
         ...customerAPI,
         getCustomerMetafields,
         updateCustomerMetafield,
-        deleteCustomerMetafield
+        deleteCustomerMetafield,
+        getOrCreateCustomerMetafield
     };
 }

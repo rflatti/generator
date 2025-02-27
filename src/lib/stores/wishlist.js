@@ -126,6 +126,8 @@ async function loadFromCustomerMetafields(shopifyAPI) {
             }
         }
 
+        // If metafield doesn't exist yet, return empty array
+        // We'll create it when items are added
         return [];
     } catch (error) {
         console.error('Error loading wishlist from customer metafields:', error);
@@ -180,7 +182,7 @@ export async function initWishlist(shopifyAPI = null) {
                     // Clear guest wishlist
                     localStorage.removeItem(WISHLIST_STORAGE_KEY);
 
-                    showMessage('success', `${itemsAdded} items from your guest wishlist were added to your account`);
+                    showMessage('success', `${itemsAdded} items from your guest wishlist were added to your account.`);
                 }
 
                 items = mergedItems;
@@ -207,12 +209,14 @@ export async function initWishlist(shopifyAPI = null) {
 export async function addToWishlist(item, shopifyAPI = null) {
     if (!browser || !item?.variantId) return;
 
+    wishlistLoading.set(true);
     const currentItems = get(wishlistItems);
 
     // Check if item already exists in wishlist
     const exists = currentItems.some(i => i.variantId === item.variantId);
 
     if (exists) {
+        wishlistLoading.set(false);
         showMessage('info', 'This item is already in your wishlist');
         return;
     }
@@ -229,15 +233,22 @@ export async function addToWishlist(item, shopifyAPI = null) {
     // Check if user is logged in
     const isLoggedIn = !!get(customerStore);
 
-    if (isLoggedIn && shopifyAPI) {
-        // Save to customer metafields
-        await saveToCustomerMetafields(updatedItems, shopifyAPI);
-    } else {
-        // Save to local storage for guests
-        saveToLocalStorage(updatedItems);
-    }
+    try {
+        if (isLoggedIn && shopifyAPI) {
+            // Save to customer metafields
+            await saveToCustomerMetafields(updatedItems, shopifyAPI);
+        } else {
+            // Save to local storage for guests
+            saveToLocalStorage(updatedItems);
+        }
 
-    showMessage('success', 'Item added to your wishlist');
+        showMessage('success', 'Item added to your wishlist');
+    } catch (error) {
+        console.error('Error adding item to wishlist:', error);
+        wishlistError.set('Failed to add item to wishlist');
+    } finally {
+        wishlistLoading.set(false);
+    }
 }
 
 /**
@@ -248,6 +259,7 @@ export async function addToWishlist(item, shopifyAPI = null) {
 export async function removeFromWishlist(variantId, shopifyAPI = null) {
     if (!browser || !variantId) return;
 
+    wishlistLoading.set(true);
     const currentItems = get(wishlistItems);
     const updatedItems = currentItems.filter(item => item.variantId !== variantId);
 
@@ -256,15 +268,22 @@ export async function removeFromWishlist(variantId, shopifyAPI = null) {
     // Check if user is logged in
     const isLoggedIn = !!get(customerStore);
 
-    if (isLoggedIn && shopifyAPI) {
-        // Save to customer metafields
-        await saveToCustomerMetafields(updatedItems, shopifyAPI);
-    } else {
-        // Save to local storage for guests
-        saveToLocalStorage(updatedItems);
-    }
+    try {
+        if (isLoggedIn && shopifyAPI) {
+            // Save to customer metafields
+            await saveToCustomerMetafields(updatedItems, shopifyAPI);
+        } else {
+            // Save to local storage for guests
+            saveToLocalStorage(updatedItems);
+        }
 
-    showMessage('success', 'Item removed from your wishlist');
+        showMessage('success', 'Item removed from your wishlist');
+    } catch (error) {
+        console.error('Error removing item from wishlist:', error);
+        wishlistError.set('Failed to remove item from wishlist');
+    } finally {
+        wishlistLoading.set(false);
+    }
 }
 
 /**
@@ -274,20 +293,28 @@ export async function removeFromWishlist(variantId, shopifyAPI = null) {
 export async function clearWishlist(shopifyAPI = null) {
     if (!browser) return;
 
+    wishlistLoading.set(true);
     wishlistItems.set([]);
 
     // Check if user is logged in
     const isLoggedIn = !!get(customerStore);
 
-    if (isLoggedIn && shopifyAPI) {
-        // Save empty array to customer metafields
-        await saveToCustomerMetafields([], shopifyAPI);
-    } else {
-        // Clear local storage for guests
-        localStorage.removeItem(WISHLIST_STORAGE_KEY);
-    }
+    try {
+        if (isLoggedIn && shopifyAPI) {
+            // Save empty array to customer metafields
+            await saveToCustomerMetafields([], shopifyAPI);
+        } else {
+            // Clear local storage for guests
+            localStorage.removeItem(WISHLIST_STORAGE_KEY);
+        }
 
-    showMessage('success', 'Your wishlist has been cleared');
+        showMessage('success', 'Your wishlist has been cleared');
+    } catch (error) {
+        console.error('Error clearing wishlist:', error);
+        wishlistError.set('Failed to clear wishlist');
+    } finally {
+        wishlistLoading.set(false);
+    }
 }
 
 /**
@@ -312,7 +339,7 @@ if (browser) {
             // Delay initialization to ensure API is ready
             setTimeout(() => initWishlist(), 100);
         } else {
-            // User logged out, switch to local storage
+            // User logged out, switch to local storage wishlist
             console.log('Customer logged out, switching to local storage wishlist');
             const items = loadFromLocalStorage();
             wishlistItems.set(items);

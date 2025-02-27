@@ -1,3 +1,4 @@
+<!-- src/lib/components/WishlistButton.svelte -->
 <script>
     import { onMount } from 'svelte';
     import { browser } from '$app/environment';
