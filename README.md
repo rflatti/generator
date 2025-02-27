@@ -90,7 +90,7 @@ This is a modern, feature-rich Shopify storefront built with SvelteKit, designed
 
 ```bash
 # Clone the repository
-git clone https://your-repo-url.git
+git clone https://github.com/rflatti/generator ./shopify-storefront
 
 # Navigate to project directory
 cd shopify-storefront
@@ -141,9 +141,9 @@ For support, please open an issue in the GitHub repository or contact the mainta
 ## 🌈 Future Roadmap
 
 - [ ] Enhanced SEO capabilities
-- [ ] More payment gateway integrations
 - [ ] Advanced product customization
 - [ ] Admin dashboard
+- [ ] Meilisearch Integration for Search and Collections
 - [ ] More comprehensive testing suite
 
 ---
