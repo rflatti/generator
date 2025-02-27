@@ -1,11 +1,11 @@
-<!-- src/lib/components/AddToCartButton.svelte -->
+<!-- src/lib/components/AddToCartButton.svelte - Updated with better error handling -->
 <script>
     import { onMount } from 'svelte';
     import { browser } from '$app/environment';
     import { i18n } from '$lib/i18n/translations';
     import { createClientStorefront } from '$lib/api/storefront.client';
     import { createCartHandler, cartGetIdDefault, cartSetIdDefault } from '$lib/api/cart';
-    import { createCartHelper, openCart } from '$lib/stores/cart';
+    import { createCartHelper, openCart, cartError } from '$lib/stores/cart';
 
     // Props
     export let variantId = ''; // The product variant ID to add to cart
@@ -22,10 +22,14 @@
     let localQuantity = quantity;
     let cartHandler;
     let cartHelper;
+    let addSuccess = false;
+    let successTimeout;
 
     // Get translations
     $: t = $i18n.t;
-    $: buttonLabel = buttonText || (disabled ? t('product.outOfStock') : t('product.addToCart'));
+    $: buttonLabel = buttonText || (disabled ? t('product.outOfStock') : (
+        addSuccess ? t('product.addedToCart') : t('product.addToCart')
+    ));
 
     // Initialize cart
     onMount(async () => {
@@ -48,7 +52,19 @@
             // Create cart helper
             cartHelper = createCartHelper(cartHandler);
         }
+
+        return () => {
+            // Clear any pending timeouts on unmount
+            if (successTimeout) clearTimeout(successTimeout);
+        };
     });
+
+    // Keep local quantity in sync with prop
+    $: {
+        if (quantity !== localQuantity) {
+            localQuantity = quantity;
+        }
+    }
 
     // Handle quantity update
     function updateQuantity(value) {
@@ -71,6 +87,17 @@
             const success = await cartHelper.addToCart(variantId, localQuantity, formattedAttributes);
 
             if (success) {
+                // Show success feedback
+                addSuccess = true;
+
+                // Clear previous timeout if exists
+                if (successTimeout) clearTimeout(successTimeout);
+
+                // Reset after 2 seconds
+                successTimeout = setTimeout(() => {
+                    addSuccess = false;
+                }, 2000);
+
                 // Open cart drawer
                 openCart();
             }
@@ -112,10 +139,17 @@
         </div>
     {/if}
 
+    {#if $cartError}
+        <div class="error-message">
+            {$cartError}
+        </div>
+    {/if}
+
     <button
             class="add-to-cart-button"
             class:loading={isLoading}
             class:disabled={disabled}
+            class:success={addSuccess}
             on:click={addToCart}
             disabled={disabled || isLoading}
     >
@@ -184,6 +218,15 @@
         color: #999;
     }
 
+    .error-message {
+        background-color: #fee2e2;
+        color: #ef4444;
+        padding: 0.5rem;
+        border-radius: 4px;
+        font-size: 0.875rem;
+        text-align: center;
+    }
+
     .add-to-cart-button {
         padding: 0.75rem 1.5rem;
         background-color: #4a4a4a;
@@ -207,6 +250,10 @@
     .add-to-cart-button.disabled {
         background-color: #ccc;
         cursor: not-allowed;
+    }
+
+    .add-to-cart-button.success {
+        background-color: #10b981;
     }
 
     .loading-spinner {

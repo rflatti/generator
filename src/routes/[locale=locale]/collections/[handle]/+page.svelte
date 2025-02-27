@@ -1,8 +1,10 @@
+
 <script>
     import { page } from '$app/stores';
     import { i18n } from '$lib/i18n/translations';
     import { formatMoney, isDiscounted } from '$lib/utils/money';
     import { generateCollectionSeo } from '$lib/utils/seo';
+    import { onMount } from 'svelte';
 
     export let data;
 
@@ -16,6 +18,12 @@
     $: pageInfo = collection?.products?.pageInfo;
     $: currentSort = data.sortOption || 'featured';
     $: currentFilters = data.filters || {};
+
+    // Local state for price range filter
+    let priceRange = { min: 0, max: 1000 };
+    let currentMinPrice = priceRange.min;
+    let currentMaxPrice = priceRange.max;
+    let filtersVisible = false;
 
     // Generate SEO data
     $: seo = generateCollectionSeo({
@@ -33,9 +41,63 @@
         { value: 'newest', label: 'Newest' }
     ];
 
+    // Initialize price range from filters
+    onMount(() => {
+        // Find price filter if it exists
+        const priceFilter = filters.find(filter => filter.id === 'filter.v.price');
+
+        if (priceFilter) {
+            // Find min and max prices from filter options
+            let min = Number.MAX_SAFE_INTEGER;
+            let max = 0;
+
+            priceFilter.values.forEach(value => {
+                try {
+                    const input = JSON.parse(value.input);
+                    if (input.price) {
+                        min = Math.min(min, input.price.min);
+                        max = Math.max(max, input.price.max);
+                    }
+                } catch (e) {
+                    console.error('Error parsing price filter value:', e);
+                }
+            });
+
+            if (min !== Number.MAX_SAFE_INTEGER && max > 0) {
+                priceRange = { min, max };
+
+                // Check if there's a price filter applied
+                const priceFilterKey = 'filter.v.price';
+                if (currentFilters[priceFilterKey]) {
+                    try {
+                        const appliedPriceFilters = JSON.parse(currentFilters[priceFilterKey]);
+                        if (appliedPriceFilters.length > 0) {
+                            const parsedPrice = JSON.parse(appliedPriceFilters[0]);
+                            if (parsedPrice.price) {
+                                currentMinPrice = parsedPrice.price.min;
+                                currentMaxPrice = parsedPrice.price.max;
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Error parsing applied price filter:', e);
+                    }
+                } else {
+                    // Initialize with full range
+                    currentMinPrice = priceRange.min;
+                    currentMaxPrice = priceRange.max;
+                }
+            }
+        }
+    });
+
     // Update URL parameters
     function updateUrlParams(newParams = {}) {
         const params = new URLSearchParams($page.url.searchParams);
+
+        // Remove cursor when applying new filters
+        if (Object.keys(newParams).some(key => key.startsWith('filter.'))) {
+            params.delete('cursor');
+        }
 
         Object.entries(newParams).forEach(([key, value]) => {
             if (value === null || value === undefined) {
@@ -45,16 +107,40 @@
             }
         });
 
-        window.location.href = `${$page.url.pathname}?${params}`;
+        return `${$page.url.pathname}?${params}`;
     }
 
     // Handle sort change
     function handleSortChange(e) {
         const newSort = e.target.value;
-        updateUrlParams({ sort: newSort });
+        window.location.href = updateUrlParams({ sort: newSort });
     }
 
-    // Handle filter change
+    // Apply price filter
+    function applyPriceFilter() {
+        if (currentMinPrice === priceRange.min && currentMaxPrice === priceRange.max) {
+            // If using full range, remove the filter
+            const newFilters = { ...currentFilters };
+            delete newFilters['filter.v.price'];
+            window.location.href = updateUrlParams(newFilters);
+        } else {
+            // Create price filter
+            const priceFilter = JSON.stringify([
+                JSON.stringify({
+                    price: {
+                        min: currentMinPrice,
+                        max: currentMaxPrice
+                    }
+                })
+            ]);
+
+            window.location.href = updateUrlParams({
+                'filter.v.price': priceFilter
+            });
+        }
+    }
+
+    // Handle checkbox filter change
     function handleFilterChange(filterId, value, checked) {
         const filterKey = `filter.${filterId}`;
         const newFilters = { ...currentFilters };
@@ -84,25 +170,26 @@
             }
         }
 
-        updateUrlParams(newFilters);
+        window.location.href = updateUrlParams(newFilters);
     }
 
     // Clear all filters
     function clearFilters() {
-        const params = new URLSearchParams($page.url.searchParams);
-        const newParams = new URLSearchParams();
+        const params = new URLSearchParams();
 
-        if (params.has('sort')) {
-            newParams.set('sort', params.get('sort'));
+        if ($page.url.searchParams.has('sort')) {
+            params.set('sort', $page.url.searchParams.get('sort'));
         }
 
-        window.location.href = `${$page.url.pathname}?${newParams}`;
+        window.location.href = `${$page.url.pathname}?${params}`;
     }
 
     // Load more products
     function loadMore() {
         if (pageInfo?.hasNextPage && pageInfo?.endCursor) {
-            updateUrlParams({ cursor: pageInfo.endCursor });
+            const params = new URLSearchParams($page.url.searchParams);
+            params.set('cursor', pageInfo.endCursor);
+            window.location.href = `${$page.url.pathname}?${params}`;
         }
     }
 
@@ -120,6 +207,11 @@
             return [];
         }
     }
+
+    // Toggle mobile filters
+    function toggleFilters() {
+        filtersVisible = !filtersVisible;
+    }
 </script>
 
 <svelte:head>
@@ -135,9 +227,15 @@
         {/if}
     </header>
 
+    <div class="mobile-filters-toggle">
+        <button on:click={toggleFilters}>
+            {filtersVisible ? 'Hide Filters' : 'Show Filters'} ({Object.keys(currentFilters).length} active)
+        </button>
+    </div>
+
     <div class="collection-content">
         <!-- Filters Sidebar -->
-        <aside class="filters-sidebar">
+        <aside class="filters-sidebar" class:visible={filtersVisible}>
             <div class="filters-header">
                 <h2>Filters</h2>
                 {#if Object.keys(currentFilters).length > 0}
@@ -149,26 +247,77 @@
 
             {#if filters.length > 0}
                 <div class="filters-list">
-                    {#each filters as filter}
-                        <div class="filter-group">
-                            <h3>{filter.label}</h3>
-                            <div class="filter-options">
-                                {#each filter.values as value}
-                                    {@const activeValues = getActiveFilterValues(filter.id)}
-                                    {@const isChecked = activeValues.includes(value.input)}
-                                    <label class="filter-option">
-                                        <input
-                                                type="checkbox"
-                                                checked={isChecked}
-                                                on:change={(e) => handleFilterChange(filter.id, value.input, e.target.checked)}
-                                        />
-                                        <span class="filter-label">
-                                            {value.label} ({value.count})
-                                        </span>
-                                    </label>
-                                {/each}
+                    <!-- Price Range Filter -->
+                    {#if filters.find(filter => filter.id === 'filter.v.price')}
+                        <div class="filter-group price-filter">
+                            <h3>Price</h3>
+                            <div class="price-range-inputs">
+                                <div class="price-input">
+                                    <label for="min-price">Min:</label>
+                                    <input
+                                            type="number"
+                                            id="min-price"
+                                            bind:value={currentMinPrice}
+                                            min={priceRange.min}
+                                            max={currentMaxPrice}
+                                    />
+                                </div>
+                                <div class="price-input">
+                                    <label for="max-price">Max:</label>
+                                    <input
+                                            type="number"
+                                            id="max-price"
+                                            bind:value={currentMaxPrice}
+                                            min={currentMinPrice}
+                                            max={priceRange.max}
+                                    />
+                                </div>
                             </div>
+                            <div class="price-slider">
+                                <input
+                                        type="range"
+                                        min={priceRange.min}
+                                        max={priceRange.max}
+                                        bind:value={currentMinPrice}
+                                        class="min-price-slider"
+                                />
+                                <input
+                                        type="range"
+                                        min={priceRange.min}
+                                        max={priceRange.max}
+                                        bind:value={currentMaxPrice}
+                                        class="max-price-slider"
+                                />
+                            </div>
+                            <button class="apply-price-filter" on:click={applyPriceFilter}>
+                                Apply Price Filter
+                            </button>
                         </div>
+                    {/if}
+
+                    <!-- Other Filters -->
+                    {#each filters as filter}
+                        {#if filter.id !== 'filter.v.price'}
+                            <div class="filter-group">
+                                <h3>{filter.label}</h3>
+                                <div class="filter-options">
+                                    {#each filter.values as value}
+                                        {@const activeValues = getActiveFilterValues(filter.id)}
+                                        {@const isChecked = activeValues.includes(value.input)}
+                                        <label class="filter-option">
+                                            <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    on:change={(e) => handleFilterChange(filter.id, value.input, e.target.checked)}
+                                            />
+                                            <span class="filter-label">
+                                                {value.label} ({value.count})
+                                            </span>
+                                        </label>
+                                    {/each}
+                                </div>
+                            </div>
+                        {/if}
                     {/each}
                 </div>
             {:else}
@@ -264,22 +413,32 @@
         color: #666;
     }
 
+    .mobile-filters-toggle {
+        display: none;
+        margin-bottom: 1rem;
+    }
+
+    .mobile-filters-toggle button {
+        width: 100%;
+        padding: 0.75rem;
+        background-color: #f5f5f5;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        text-align: center;
+    }
+
     .collection-content {
         display: grid;
         grid-template-columns: 250px 1fr;
         gap: 2rem;
     }
 
-    @media (max-width: 768px) {
-        .collection-content {
-            grid-template-columns: 1fr;
-        }
-    }
-
     .filters-sidebar {
         background-color: #f9f9f9;
         padding: 1.5rem;
         border-radius: 8px;
+        align-self: start;
     }
 
     .filters-header {
@@ -306,6 +465,77 @@
         font-size: 1rem;
     }
 
+    /* Price Filter Styles */
+    .price-filter {
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #eee;
+    }
+
+    .price-range-inputs {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .price-input {
+        flex: 1;
+    }
+
+    .price-input label {
+        display: block;
+        font-size: 0.875rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .price-input input {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+
+    .price-slider {
+        position: relative;
+        height: 1.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .price-slider input[type="range"] {
+        position: absolute;
+        width: 100%;
+        height: 5px;
+        background: none;
+        pointer-events: none;
+    }
+
+    .min-price-slider {
+        z-index: 2;
+    }
+
+    .max-price-slider {
+        z-index: 1;
+    }
+
+    .price-slider input[type="range"]::-webkit-slider-thumb {
+        pointer-events: auto;
+    }
+
+    .apply-price-filter {
+        width: 100%;
+        padding: 0.5rem;
+        background-color: #f0f0f0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .apply-price-filter:hover {
+        background-color: #e5e5e5;
+    }
+
+    /* Other Filter Styles */
     .filter-option {
         display: flex;
         align-items: center;
@@ -420,6 +650,29 @@
         border: 1px solid #ddd;
         border-radius: 4px;
         cursor: pointer;
-        transition: background-color;
+        transition: background-color 0.2s;
     }
-    </style>
+
+    .load-more button:hover {
+        background-color: #e8e8e8;
+    }
+
+    @media (max-width: 768px) {
+        .collection-content {
+            grid-template-columns: 1fr;
+        }
+
+        .mobile-filters-toggle {
+            display: block;
+        }
+
+        .filters-sidebar {
+            display: none;
+            margin-bottom: 1.5rem;
+        }
+
+        .filters-sidebar.visible {
+            display: block;
+        }
+    }
+</style>

@@ -1,3 +1,5 @@
+// src/routes/[locale=locale]/collections/[handle]/+page.server.js
+
 import { error } from '@sveltejs/kit';
 import { createCollectionAPI } from '$lib/api/collection';
 
@@ -24,6 +26,9 @@ export async function load({ locals, params, url }) {
         }
     }
 
+    // Log the cursor value to debug pagination issues
+    console.log('Pagination cursor:', cursor);
+
     // Parse sorting and filters
     const { sortKey, reverse } = collectionAPI.parseSortKey(sortParam);
     const filters = collectionAPI.parseFilters(filterParams);
@@ -41,6 +46,9 @@ export async function load({ locals, params, url }) {
         if (!collection) {
             throw error(404, 'Collection not found');
         }
+
+        // Log the returned pageInfo for debugging
+        console.log('Page Info:', collection.products?.pageInfo);
 
         return {
             collection,

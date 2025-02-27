@@ -1,3 +1,5 @@
+// Updated src/lib/api/cart.js
+
 /**
  * Cart handler for Shopify Storefront API
  * Handles cart operations and state management
@@ -9,6 +11,8 @@ import { CacheNone } from './storefront';
 
 // Create a Svelte store for the cart
 export const cartStore = writable(null);
+// Add a store for cart errors
+export const cartErrorStore = writable(null);
 
 // Cart ID cookie name
 const CART_COOKIE = 'shopify_cart_id';
@@ -218,6 +222,18 @@ const GET_CART_QUERY = `#graphql
 `;
 
 /**
+ * Helper function to set cart error
+ */
+function setCartError(message) {
+    if (browser) {
+        cartErrorStore.set(message);
+        // Clear error after 5 seconds
+        setTimeout(() => cartErrorStore.set(null), 5000);
+    }
+    console.error(message);
+}
+
+/**
  * Create a cart handler to manage cart operations
  */
 export function createCartHandler({ storefront, getCartId, setCartId }) {
@@ -245,6 +261,7 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
             return cart;
         } catch (error) {
             console.error('Error fetching cart:', error);
+            setCartError('We had trouble retrieving your cart. Please refresh the page.');
             return null;
         }
     }
@@ -266,6 +283,7 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
             });
 
             if (!cartCreate?.cart) {
+                setCartError('Failed to create cart. Please try again.');
                 throw new Error('Failed to create cart');
             }
 
@@ -281,6 +299,7 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
             };
         } catch (error) {
             console.error('Error creating cart:', error);
+            setCartError('Unable to create a new cart. Please try again later.');
             throw error;
         }
     }
@@ -305,9 +324,18 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
                 cache: CacheNone()
             });
 
+            if (cartLinesAdd.userErrors && cartLinesAdd.userErrors.length > 0) {
+                setCartError(`Failed to add to cart: ${cartLinesAdd.userErrors[0].message}`);
+                return {
+                    cart: cartLinesAdd?.cart,
+                    errors: cartLinesAdd.userErrors
+                };
+            }
+
             const cart = cartLinesAdd?.cart;
 
             if (!cart) {
+                setCartError('Failed to update cart. Please try again.');
                 throw new Error('Failed to add lines to cart');
             }
 
@@ -319,6 +347,7 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
             };
         } catch (error) {
             console.error('Error adding lines to cart:', error);
+            setCartError('Unable to add item to your cart. Please try again.');
             throw error;
         }
     }
@@ -331,39 +360,38 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
 
         if (!cartId) {
             console.error('No cart ID available for updateLines');
+            setCartError('Cart not found. Please add an item first.');
             throw new Error('No cart ID available');
         }
 
-        console.log(`updateLines: Updating lines in cart ${cartId}:`, lines);
-        console.log('updateLines: Using storefront API:', storefront);
-
         try {
-            console.log('updateLines: Preparing to call Storefront API');
-
             const variables = {
                 cartId,
                 lines
             };
-
-            console.log('updateLines: API call variables:', variables);
-            console.log('updateLines: Using query:', UPDATE_LINES_MUTATION.substring(0, 100) + '...');
 
             const result = await storefront.query(UPDATE_LINES_MUTATION, {
                 variables,
                 cache: CacheNone()
             });
 
-            console.log('updateLines: API call successful, result:', result);
-
             const { cartLinesUpdate } = result;
+
+            if (cartLinesUpdate.userErrors && cartLinesUpdate.userErrors.length > 0) {
+                setCartError(`Failed to update cart: ${cartLinesUpdate.userErrors[0].message}`);
+                return {
+                    cart: cartLinesUpdate?.cart,
+                    errors: cartLinesUpdate.userErrors
+                };
+            }
+
             const cart = cartLinesUpdate?.cart;
 
             if (!cart) {
-                console.error('updateLines: Failed to update cart lines - no cart in response');
+                setCartError('Failed to update quantities. Please try again.');
                 throw new Error('Failed to update cart lines');
             }
 
-            console.log('updateLines: Cart updated successfully');
             updateCartStore(cart);
 
             return {
@@ -372,6 +400,7 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
             };
         } catch (error) {
             console.error('updateLines: Error updating cart lines:', error);
+            setCartError('Unable to update quantities. Please try refreshing the page.');
             throw error;
         }
     }
@@ -381,43 +410,41 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
      */
     async function removeLines(lineIds) {
         const cartId = getCartId();
-        console.log('Remove Line cart id', cartId);
 
         if (!cartId) {
             console.error('removeLines: No cart ID available');
+            setCartError('Cart not found. Please add an item first.');
             throw new Error('No cart ID available');
         }
 
-        console.log(`removeLines: Removing lines from cart ${cartId}:`, lineIds);
-        console.log('removeLines: Using storefront API:', storefront);
-
         try {
-            console.log('removeLines: Preparing to call Storefront API');
-
             const variables = {
                 cartId,
                 lineIds
             };
-
-            console.log('removeLines: API call variables:', variables);
-            console.log('removeLines: Using query:', REMOVE_LINES_MUTATION.substring(0, 100) + '...');
 
             const result = await storefront.query(REMOVE_LINES_MUTATION, {
                 variables,
                 cache: CacheNone()
             });
 
-            console.log('removeLines: API call successful, result:', result);
-
             const { cartLinesRemove } = result;
+
+            if (cartLinesRemove.userErrors && cartLinesRemove.userErrors.length > 0) {
+                setCartError(`Failed to remove item: ${cartLinesRemove.userErrors[0].message}`);
+                return {
+                    cart: cartLinesRemove?.cart,
+                    errors: cartLinesRemove.userErrors
+                };
+            }
+
             const cart = cartLinesRemove?.cart;
 
             if (!cart) {
-                console.error('removeLines: Failed to remove cart lines - no cart in response');
+                setCartError('Failed to remove items. Please try again.');
                 throw new Error('Failed to remove cart lines');
             }
 
-            console.log('removeLines: Cart updated successfully');
             updateCartStore(cart);
 
             return {
@@ -426,6 +453,7 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
             };
         } catch (error) {
             console.error('removeLines: Error removing cart lines:', error);
+            setCartError('Unable to remove item. Please try refreshing the page.');
             throw error;
         }
     }
@@ -437,6 +465,7 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
         const cartId = getCartId();
 
         if (!cartId) {
+            setCartError('Cart not found. Please add an item first.');
             throw new Error('No cart ID available');
         }
 
@@ -449,9 +478,18 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
                 cache: CacheNone()
             });
 
+            if (cartDiscountCodesUpdate.userErrors && cartDiscountCodesUpdate.userErrors.length > 0) {
+                setCartError(`Failed to update discount: ${cartDiscountCodesUpdate.userErrors[0].message}`);
+                return {
+                    cart: cartDiscountCodesUpdate?.cart,
+                    errors: cartDiscountCodesUpdate.userErrors
+                };
+            }
+
             const cart = cartDiscountCodesUpdate?.cart;
 
             if (!cart) {
+                setCartError('Failed to apply discount. Please try again.');
                 throw new Error('Failed to update discount codes');
             }
 
@@ -463,6 +501,7 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
             };
         } catch (error) {
             console.error('Error updating discount codes:', error);
+            setCartError('Unable to apply discount. Please try again later.');
             throw error;
         }
     }
@@ -474,6 +513,7 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
         const cartId = getCartId();
 
         if (!cartId) {
+            setCartError('Cart not found. Please add an item first.');
             throw new Error('No cart ID available');
         }
 
@@ -486,9 +526,18 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
                 cache: CacheNone()
             });
 
+            if (cartBuyerIdentityUpdate.userErrors && cartBuyerIdentityUpdate.userErrors.length > 0) {
+                setCartError(`Failed to update buyer information: ${cartBuyerIdentityUpdate.userErrors[0].message}`);
+                return {
+                    cart: cartBuyerIdentityUpdate?.cart,
+                    errors: cartBuyerIdentityUpdate.userErrors
+                };
+            }
+
             const cart = cartBuyerIdentityUpdate?.cart;
 
             if (!cart) {
+                setCartError('Failed to update your information. Please try again.');
                 throw new Error('Failed to update buyer identity');
             }
 
@@ -500,6 +549,7 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
             };
         } catch (error) {
             console.error('Error updating buyer identity:', error);
+            setCartError('Unable to update your information. Please try again later.');
             throw error;
         }
     }
@@ -521,7 +571,8 @@ export function createCartHandler({ storefront, getCartId, setCartId }) {
         removeLines,
         updateDiscountCodes,
         updateBuyerIdentity,
-        cartStore
+        cartStore,
+        cartErrorStore
     };
 }
 
@@ -536,9 +587,6 @@ export function cartGetIdDefault(cookies) {
                 .find(row => row.startsWith(`${CART_COOKIE}=`))
                 ?.split('=')[1]
                 ?.split('?')[0];
-
-            console.info('cookieValue', cookieValue);
-
 
             if (cookieValue) {
                 const decodedCartId = decodeURIComponent(cookieValue);

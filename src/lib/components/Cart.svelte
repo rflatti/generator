@@ -1,4 +1,4 @@
-<!-- src/lib/components/Cart.svelte -->
+<!-- Updated src/lib/components/Cart.svelte with improved feedback -->
 <script>
     import { onMount } from 'svelte';
     import { browser } from '$app/environment';
@@ -7,7 +7,7 @@
     import { formatMoney } from '$lib/utils/money';
     import { createClientStorefront } from '$lib/api/storefront.client';
     import { createCartHandler, cartGetIdDefault, cartSetIdDefault } from '$lib/api/cart';
-    import { createCartHelper, isCartOpen, cartQuantity, cart, closeCart } from '$lib/stores/cart';
+    import { createCartHelper, isCartOpen, cartQuantity, cart, closeCart, cartError, cartOperationResult } from '$lib/stores/cart';
 
     // Props
     export let locale = undefined;
@@ -19,8 +19,8 @@
     let cartHandler;
     let cartHelper;
     let isLoading = true;
+    let updateInProgress = false;
     let discountCode = '';
-    let discountError = '';
 
     // Initialize cart
     onMount(async () => {
@@ -44,87 +44,90 @@
             cartHelper = createCartHelper(cartHandler);
 
             // Fetch cart data
-            await cartHandler.get();
-            isLoading = false;
+            try {
+                await cartHandler.get();
+            } catch (error) {
+                console.error('Error fetching cart:', error);
+                if (cartHelper) {
+                    cartHelper.setResult(false, t('cart.errorLoading'));
+                }
+            } finally {
+                isLoading = false;
+            }
         }
     });
 
     // Handle remove item
     async function removeItem(lineId) {
-        if (cartHelper) {
-            isLoading = true;
-            try {
-                const result = await cartHelper.removeLine(lineId);
-                if (!result) {
-                    console.error('Failed to remove item', result);
-                }
-                // Get fresh cart data to ensure UI is in sync
-                await cartHandler.get();
-            } catch (error) {
-                console.error('Error removing item:', error);
-            } finally {
-                isLoading = false;
-            }
+        if (!cartHelper || updateInProgress) return;
+
+        updateInProgress = true;
+        isLoading = true;
+
+        try {
+            await cartHelper.removeLine(lineId);
+        } catch (error) {
+            console.error('Error removing item:', error);
+        } finally {
+            updateInProgress = false;
+            isLoading = false;
         }
     }
 
     // Handle quantity change
     async function updateQuantity(lineId, newQuantity) {
+        if (!cartHelper || updateInProgress) return;
+
         if (newQuantity < 1) {
             return removeItem(lineId);
         }
 
-        if (cartHelper) {
-            isLoading = true;
-            try {
-                const result = await cartHelper.updateLineQuantity(lineId, newQuantity);
-                if (!result) {
-                    console.error('Failed to update quantity', result);
-                }
-                // Get fresh cart data to ensure UI is in sync
-                await cartHandler.get();
-            } catch (error) {
-                console.error('Error updating quantity:', error);
-            } finally {
-                isLoading = false;
-            }
+        updateInProgress = true;
+        isLoading = true;
+
+        try {
+            await cartHelper.updateLineQuantity(lineId, newQuantity);
+        } catch (error) {
+            console.error('Error updating quantity:', error);
+        } finally {
+            updateInProgress = false;
+            isLoading = false;
         }
     }
 
     // Apply discount code
     async function applyDiscount() {
-        if (!discountCode || !cartHelper) return;
+        if (!discountCode || !cartHelper || updateInProgress) return;
 
+        updateInProgress = true;
         isLoading = true;
-        discountError = '';
 
         try {
             const success = await cartHelper.applyDiscount(discountCode);
-            if (!success) {
-                discountError = t('cart.discountError');
-            } else {
-                discountCode = '';
-                // Get fresh cart data to ensure UI is in sync
-                await cartHandler.get();
+            if (success) {
+                discountCode = ''; // Only clear on success
             }
         } catch (error) {
             console.error('Error applying discount:', error);
-            discountError = t('cart.discountError');
         } finally {
+            updateInProgress = false;
             isLoading = false;
         }
     }
 
     // Remove discount code
     async function removeDiscount(code) {
-        if (!cartHelper) return;
+        if (!cartHelper || updateInProgress) return;
 
+        updateInProgress = true;
         isLoading = true;
+
         try {
             await cartHelper.removeDiscount(code);
         } catch (error) {
             console.error('Error removing discount:', error);
         } finally {
+            updateInProgress = false;
             isLoading = false;
         }
     }
@@ -142,6 +145,8 @@
     function goToCheckout() {
         if (checkoutUrl) {
             window.location.href = checkoutUrl;
+        } else if (cartHelper) {
+            cartHelper.setResult(false, t('cart.checkoutUnavailable'));
         }
     }
 
@@ -166,7 +171,19 @@
         </div>
 
         <div class="cart-content">
-            {#if isLoading}
+            {#if $cartOperationResult.message}
+                <div class="feedback-message {$cartOperationResult.type}">
+                    {$cartOperationResult.message}
+                </div>
+            {/if}
+
+            {#if $cartError}
+                <div class="feedback-message error">
+                    {$cartError}
+                </div>
+            {/if}
+
+            {#if isLoading || updateInProgress}
                 <div class="loading">
                     <p>{t('message.loading')}</p>
                 </div>
@@ -210,11 +227,21 @@
 
                                     <div class="item-controls">
                                         <div class="quantity-controls">
-                                            <button on:click={() => updateQuantity(item.id, item.quantity - 1)}>-</button>
+                                            <button
+                                                    on:click={() => updateQuantity(item.id, item.quantity - 1)}
+                                                    disabled={updateInProgress}
+                                            >-</button>
                                             <span>{item.quantity}</span>
-                                            <button on:click={() => updateQuantity(item.id, item.quantity + 1)}>+</button>
+                                            <button
+                                                    on:click={() => updateQuantity(item.id, item.quantity + 1)}
+                                                    disabled={updateInProgress}
+                                            >+</button>
                                         </div>
-                                        <button class="remove-item" on:click={() => removeItem(item.id)}>
+                                        <button
+                                                class="remove-item"
+                                                on:click={() => removeItem(item.id)}
+                                                disabled={updateInProgress}
+                                        >
                                             {t('cart.remove')}
                                         </button>
                                     </div>
@@ -235,21 +262,25 @@
                                     bind:value={discountCode}
                                     placeholder={t('cart.discountPlaceholder')}
                                     on:keydown={(e) => e.key === 'Enter' && applyDiscount()}
+                                    disabled={updateInProgress}
                             />
-                            <button on:click={applyDiscount}>
+                            <button
+                                    on:click={applyDiscount}
+                                    disabled={updateInProgress || !discountCode}
+                            >
                                 {t('cart.applyDiscount')}
                             </button>
                         </div>
-                        {#if discountError}
-                            <p class="discount-error">{discountError}</p>
-                        {/if}
 
                         {#if appliedDiscounts.length > 0}
                             <div class="applied-discounts">
                                 {#each appliedDiscounts as discount}
                                     <div class="discount-tag">
                                         <span>{discount.code}</span>
-                                        <button on:click={() => removeDiscount(discount.code)}>×</button>
+                                        <button
+                                                on:click={() => removeDiscount(discount.code)}
+                                                disabled={updateInProgress}
+                                        >×</button>
                                     </div>
                                 {/each}
                             </div>
@@ -268,7 +299,11 @@
                     </div>
 
                     <!-- Checkout Button -->
-                    <button class="checkout-button" on:click={goToCheckout}>
+                    <button
+                            class="checkout-button"
+                            on:click={goToCheckout}
+                            disabled={updateInProgress || $cartQuantity === 0}
+                    >
                         {t('cart.checkout')}
                     </button>
                 </div>
@@ -333,6 +368,32 @@
         padding: 1rem;
         display: flex;
         flex-direction: column;
+    }
+
+    .feedback-message {
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+        border-radius: 4px;
+        font-size: 0.9rem;
+        text-align: center;
+    }
+
+    .feedback-message.success {
+        background-color: #ecfdf5;
+        color: #10b981;
+        border: 1px solid #10b981;
+    }
+
+    .feedback-message.error {
+        background-color: #fee2e2;
+        color: #ef4444;
+        border: 1px solid #ef4444;
+    }
+
+    .feedback-message.warning {
+        background-color: #fffbeb;
+        color: #f59e0b;
+        border: 1px solid #f59e0b;
     }
 
     .loading, .empty-cart {
@@ -432,6 +493,11 @@
         cursor: pointer;
     }
 
+    .quantity-controls button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
     .quantity-controls span {
         padding: 0 0.5rem;
     }
@@ -443,6 +509,11 @@
         text-decoration: underline;
         cursor: pointer;
         font-size: 0.875rem;
+    }
+
+    .remove-item:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
 
     .cart-summary {
@@ -472,6 +543,11 @@
         border-radius: 4px;
     }
 
+    .discount-form input:disabled {
+        background-color: #f9f9f9;
+        cursor: not-allowed;
+    }
+
     .discount-form button {
         padding: 0.5rem;
         background: #f5f5f5;
@@ -480,10 +556,9 @@
         cursor: pointer;
     }
 
-    .discount-error {
-        color: #e53e3e;
-        font-size: 0.875rem;
-        margin: 0.5rem 0 0;
+    .discount-form button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
     }
 
     .applied-discounts {
@@ -511,6 +586,11 @@
         line-height: 1;
     }
 
+    .discount-tag button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
     .summary-item {
         display: flex;
         justify-content: space-between;
@@ -536,8 +616,13 @@
         transition: background-color 0.2s;
     }
 
-    .checkout-button:hover {
+    .checkout-button:hover:not(:disabled) {
         background: #333;
+    }
+
+    .checkout-button:disabled {
+        background: #999;
+        cursor: not-allowed;
     }
 
     @media (max-width: 480px) {

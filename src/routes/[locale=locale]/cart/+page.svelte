@@ -1,4 +1,4 @@
-<!-- src/routes/[locale=locale]/cart/+page.svelte -->
+<!-- src/routes/[locale=locale]/cart/+page.svelte - Updated with accurate feedback -->
 <script>
     import { onMount } from 'svelte';
     import { browser } from '$app/environment';
@@ -7,7 +7,7 @@
     import { formatMoney } from '$lib/utils/money';
     import { createClientStorefront } from '$lib/api/storefront.client';
     import { createCartHandler, cartGetIdDefault, cartSetIdDefault } from '$lib/api/cart';
-    import { createCartHelper, cart } from '$lib/stores/cart';
+    import { createCartHelper, cart, cartError, cartOperationResult } from '$lib/stores/cart';
     import Link from '$lib/components/Link.svelte';
 
     export let data;
@@ -19,8 +19,8 @@
     let cartHandler;
     let cartHelper;
     let isLoading = true;
+    let updateInProgress = false;
     let discountCode = '';
-    let discountError = '';
 
     // Initialize cart
     onMount(async () => {
@@ -44,94 +44,106 @@
             cartHelper = createCartHelper(cartHandler);
 
             // Fetch cart data
-            await cartHandler.get();
-            isLoading = false;
+            try {
+                await cartHandler.get();
+            } catch (error) {
+                if (cartHelper) {
+                    cartHelper.setResult(false, t('cart.errorLoading'));
+                }
+            } finally {
+                isLoading = false;
+            }
         }
     });
 
     // Handle remove item
     async function removeItem(lineId) {
-        if (cartHelper) {
-            isLoading = true;
-            try {
-                const result = await cartHelper.removeLine(lineId);
-                if (!result) {
-                    console.error('Failed to remove item', result);
-                }
-                // Get fresh cart data to ensure UI is in sync
-                await cartHandler.get();
-            } catch (error) {
-                console.error('Error removing item:', error);
-            } finally {
-                isLoading = false;
-            }
+        if (!cartHelper || updateInProgress) return;
+
+        updateInProgress = true;
+        isLoading = true;
+
+        try {
+            await cartHelper.removeLine(lineId);
+        } catch (error) {
+            console.error('Error removing item:', error);
+        } finally {
+            updateInProgress = false;
+            isLoading = false;
         }
     }
 
     // Handle quantity change
     async function updateQuantity(lineId, newQuantity) {
+        if (!cartHelper || updateInProgress) return;
+
         if (newQuantity < 1) {
             return removeItem(lineId);
         }
 
-        if (cartHelper) {
-            isLoading = true;
-            try {
-                const result = await cartHelper.updateLineQuantity(lineId, newQuantity);
-                if (!result) {
-                    console.error('Failed to update quantity', result);
-                }
-                // Get fresh cart data to ensure UI is in sync
-                await cartHandler.get();
-            } catch (error) {
-                console.error('Error updating quantity:', error);
-            } finally {
-                isLoading = false;
-            }
+        updateInProgress = true;
+        isLoading = true;
+
+        try {
+            await cartHelper.updateLineQuantity(lineId, newQuantity);
+        } catch (error) {
+            console.error('Error updating quantity:', error);
+        } finally {
+            updateInProgress = false;
+            isLoading = false;
         }
     }
 
     // Apply discount code
     async function applyDiscount() {
-        if (!discountCode || !cartHelper) return;
+        if (!discountCode || !cartHelper || updateInProgress) return;
 
+        updateInProgress = true;
         isLoading = true;
-        discountError = '';
 
         try {
             const success = await cartHelper.applyDiscount(discountCode);
-            if (!success) {
-                discountError = t('cart.discountError');
-            } else {
-                discountCode = '';
+            if (success) {
+                discountCode = ''; // Clear input only on success
             }
         } catch (error) {
             console.error('Error applying discount:', error);
-            discountError = t('cart.discountError');
         } finally {
+            updateInProgress = false;
             isLoading = false;
         }
     }
 
     // Remove discount code
     async function removeDiscount(code) {
-        if (!cartHelper) return;
+        if (!cartHelper || updateInProgress) return;
 
+        updateInProgress = true;
         isLoading = true;
+
         try {
             await cartHelper.removeDiscount(code);
         } catch (error) {
             console.error('Error removing discount:', error);
         } finally {
+            updateInProgress = false;
             isLoading = false;
         }
     }
 
     // Clear cart
     async function clearCart() {
-        if (cartHelper) {
-            isLoading = true;
+        if (!cartHelper || updateInProgress) return;
+
+        updateInProgress = true;
+        isLoading = true;
+
+        try {
             await cartHelper.clearCart();
+        } catch (error) {
+            console.error('Error clearing cart:', error);
+        } finally {
+            updateInProgress = false;
             isLoading = false;
         }
     }
@@ -149,6 +161,8 @@
     function goToCheckout() {
         if (checkoutUrl) {
             window.location.href = checkoutUrl;
+        } else if (cartHelper) {
+            cartHelper.setResult(false, t('cart.checkoutUnavailable'));
         }
     }
 
@@ -169,7 +183,19 @@
 <div class="cart-page">
     <h1>{t('cart.title')}</h1>
 
-    {#if isLoading}
+    {#if $cartOperationResult.message}
+        <div class="feedback-message {$cartOperationResult.type}">
+            {$cartOperationResult.message}
+        </div>
+    {/if}
+
+    {#if $cartError}
+        <div class="feedback-message error">
+            {$cartError}
+        </div>
+    {/if}
+
+    {#if isLoading || updateInProgress}
         <div class="loading">
             <p>{t('message.loading')}</p>
         </div>
@@ -228,6 +254,7 @@
                                         <button
                                                 on:click={() => updateQuantity(item.id, item.quantity - 1)}
                                                 aria-label="Decrease quantity"
+                                                disabled={updateInProgress}
                                         >
                                             -
                                         </button>
@@ -237,10 +264,12 @@
                                                 value={item.quantity}
                                                 on:input={(e) => updateQuantity(item.id, parseInt(e.target.value) || 1)}
                                                 aria-label="Quantity"
+                                                disabled={updateInProgress}
                                         />
                                         <button
                                                 on:click={() => updateQuantity(item.id, item.quantity + 1)}
                                                 aria-label="Increase quantity"
+                                                disabled={updateInProgress}
                                         >
                                             +
                                         </button>
@@ -250,7 +279,11 @@
                                     {formatMoney(item.cost.total)}
                                 </td>
                                 <td class="action-cell">
-                                    <button class="remove-button" on:click={() => removeItem(item.id)}>
+                                    <button
+                                            class="remove-button"
+                                            on:click={() => removeItem(item.id)}
+                                            disabled={updateInProgress}
+                                    >
                                         {t('cart.remove')}
                                     </button>
                                 </td>
@@ -261,7 +294,11 @@
                 </table>
 
                 <div class="cart-actions">
-                    <button class="button secondary" on:click={clearCart}>
+                    <button
+                            class="button secondary"
+                            on:click={clearCart}
+                            disabled={updateInProgress}
+                    >
                         {t('cart.clear')}
                     </button>
                     <Link href="/" className="button secondary">
@@ -283,21 +320,26 @@
                                     bind:value={discountCode}
                                     placeholder={t('cart.discountPlaceholder') || "Enter discount code"}
                                     on:keydown={(e) => e.key === 'Enter' && applyDiscount()}
+                                    disabled={updateInProgress}
                             />
-                            <button class="button secondary" on:click={applyDiscount}>
+                            <button
+                                    class="button secondary"
+                                    on:click={applyDiscount}
+                                    disabled={updateInProgress || !discountCode}
+                            >
                                 {t('cart.applyDiscount') || "Apply"}
                             </button>
                         </div>
-                        {#if discountError}
-                            <p class="discount-error">{discountError}</p>
-                        {/if}
 
                         {#if appliedDiscounts.length > 0}
                             <div class="applied-discounts">
                                 {#each appliedDiscounts as discount}
                                     <div class="discount-tag">
                                         <span>{discount.code}</span>
-                                        <button on:click={() => removeDiscount(discount.code)}>×</button>
+                                        <button
+                                                on:click={() => removeDiscount(discount.code)}
+                                                disabled={updateInProgress}
+                                        >×</button>
                                     </div>
                                 {/each}
                             </div>
@@ -323,7 +365,11 @@
                     </div>
 
                     <!-- Checkout Button -->
-                    <button class="checkout-button" on:click={goToCheckout}>
+                    <button
+                            class="checkout-button"
+                            on:click={goToCheckout}
+                            disabled={updateInProgress || isEmpty}
+                    >
                         {t('cart.checkout')}
                     </button>
                 </div>
@@ -342,6 +388,31 @@
     h1 {
         margin-bottom: 2rem;
         font-size: 2rem;
+    }
+
+    .feedback-message {
+        padding: 1rem;
+        margin-bottom: 1rem;
+        border-radius: 4px;
+        text-align: center;
+    }
+
+    .feedback-message.success {
+        background-color: #ecfdf5;
+        color: #10b981;
+        border: 1px solid #10b981;
+    }
+
+    .feedback-message.error {
+        background-color: #fee2e2;
+        color: #ef4444;
+        border: 1px solid #ef4444;
+    }
+
+    .feedback-message.warning {
+        background-color: #fffbeb;
+        color: #f59e0b;
+        border: 1px solid #f59e0b;
     }
 
     .loading, .empty-cart {
@@ -451,6 +522,11 @@
         cursor: pointer;
     }
 
+    .quantity-controls button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
     .quantity-controls input {
         width: 40px;
         border: none;
@@ -464,12 +540,21 @@
         margin: 0;
     }
 
+    .quantity-controls input:disabled {
+        background-color: #f9f9f9;
+    }
+
     .remove-button {
         background: none;
         border: none;
         color: #666;
         text-decoration: underline;
         cursor: pointer;
+    }
+
+    .remove-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
 
     .cart-actions {
@@ -490,13 +575,18 @@
         justify-content: center;
     }
 
+    .button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
     .button.secondary {
         background-color: #f5f5f5;
         color: #333;
         border: 1px solid #ddd;
     }
 
-    .button.secondary:hover {
+    .button.secondary:hover:not(:disabled) {
         background-color: #eee;
     }
 
@@ -538,10 +628,8 @@
         border-radius: 4px;
     }
 
-    .discount-error {
-        color: #e53e3e;
-        font-size: 0.875rem;
-        margin: 0.5rem 0 0;
+    .discount-form input:disabled {
+        background-color: #f5f5f5;
     }
 
     .applied-discounts {
@@ -567,6 +655,11 @@
         cursor: pointer;
         font-size: 1rem;
         line-height: 1;
+    }
+
+    .discount-tag button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
 
     .summary-item {
@@ -598,7 +691,12 @@
         margin-top: 1rem;
     }
 
-    .checkout-button:hover {
+    .checkout-button:hover:not(:disabled) {
         background: #333;
+    }
+
+    .checkout-button:disabled {
+        background: #999;
+        cursor: not-allowed;
     }
 </style>

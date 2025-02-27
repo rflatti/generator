@@ -76,6 +76,59 @@ const translations = {
         'message.error': 'Error',
         'message.loading': 'Loading...',
         'message.notFound': 'Not Found',
+
+
+        // Cart errors
+        'cart.errorLoading': 'There was a problem loading your cart. Please refresh the page.',
+        'cart.errorUpdating': 'Failed to update item quantity. Please try again.',
+        'cart.errorRemoving': 'Could not remove this item. Please try again.',
+        'cart.errorClearingCart': 'Could not clear your cart. Please try again.',
+        'cart.errorRemovingDiscount': 'Could not remove the discount code. Please try again.',
+        'cart.discountError': 'This discount code could not be applied. It might be invalid or expired.',
+        'cart.discountApplied': 'Discount code applied successfully.',
+        'cart.discountRemoved': 'Discount code has been removed.',
+        'cart.itemRemoved': 'Item removed from cart.',
+        'cart.quantityUpdated': 'Quantity updated successfully.',
+        'cart.cartCleared': 'Your cart has been cleared.',
+        'cart.checkoutUnavailable': 'Checkout is currently unavailable. Please try again later.',
+
+        // Product errors
+        'product.addedToCart': 'Added to cart!',
+        'product.adding': 'Adding...',
+        'product.errorAdding': 'Could not add this item to your cart. Please try again.',
+        'product.unavailable': 'This product is currently unavailable.',
+        'product.selectOptions': 'Please select all options before adding to cart.',
+
+        // Collection errors
+        'collections.errorLoading': 'Unable to load collections. Please refresh the page.',
+        'collections.productLoadError': 'Unable to load products. Please try again.',
+        'collections.filterError': 'Could not apply filters. Please try again.',
+
+        // Account errors
+        'account.loginRequired': 'You need to be logged in to access this page.',
+        'account.invalidCredentials': 'The email or password you entered is incorrect.',
+        'account.registrationError': 'Could not create your account. Please check the information and try again.',
+        'account.passwordMismatch': 'The passwords you entered do not match.',
+        'account.updateSuccess': 'Your account has been updated successfully.',
+        'account.updateError': 'Could not update your account information. Please try again.',
+
+        // General errors
+        'error.general': 'Something went wrong. Please try again.',
+        'error.network': 'Network error. Please check your connection and try again.',
+        'error.pageNotFound': 'The page you are looking for does not exist.',
+        'error.serverError': 'Server error. Please try again later.',
+
+        // Success messages
+        'success.actionComplete': 'Action completed successfully.',
+        'success.changes_saved': 'Your changes have been saved.',
+
+        // Form validation
+        'validation.required': 'This field is required.',
+        'validation.email': 'Please enter a valid email address.',
+        'validation.minLength': 'Must be at least {min} characters.',
+        'validation.maxLength': 'Cannot be more than {max} characters.',
+        'validation.passwordMatch': 'Passwords must match.',
+        'validation.numeric': 'This field must contain only numbers.',
     },
 
     de: {

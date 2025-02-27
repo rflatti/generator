@@ -237,32 +237,52 @@ export function createCollectionAPI(storefront) {
     /**
      * Helper method to parse filter parameters
      */
-    /**
-     * Helper method to parse filter parameters
-     */
     function parseFilters(params = {}) {
         const filters = [];
 
         for (const [key, value] of Object.entries(params)) {
             if (key.startsWith('filter.')) {
-                // Handle the case where there might be a double "filter." prefix
+                // Extract the filter key correctly
                 let filterKey = key.replace('filter.', '');
-                // Handle a potential second "filter." prefix
                 if (filterKey.startsWith('filter.')) {
                     filterKey = filterKey.replace('filter.', '');
                 }
 
-                const filterParts = filterKey.split('.');
-                console.log(`Processing filter: ${key} -> ${filterKey} -> parts: ${JSON.stringify(filterParts)}`);
+                console.log(`Processing filter: ${key} -> ${filterKey} with value: ${value}`);
 
                 try {
+                    // Handle price filter specifically
+                    if (filterKey === 'v.price') {
+                        try {
+                            const priceValues = JSON.parse(value);
+
+                            for (const priceValue of priceValues) {
+                                const parsed = JSON.parse(priceValue);
+
+                                if (parsed.price) {
+                                    filters.push({
+                                        price: {
+                                            min: parseFloat(parsed.price.min),
+                                            max: parseFloat(parsed.price.max)
+                                        }
+                                    });
+                                    console.log('Added price filter:', {
+                                        price: {
+                                            min: parseFloat(parsed.price.min),
+                                            max: parseFloat(parsed.price.max)
+                                        }
+                                    });
+                                }
+                            }
+                        } catch (e) {
+                            console.error(`Error parsing price filter ${key}:`, e);
+                        }
+                    }
                     // Handle product metafields
-                    if (filterParts[0] === 'p' && filterParts[1] === 'm' && filterParts.length >= 4) {
-                        // This is a product metafield filter
+                    else if (filterKey.startsWith('p.m') && filterKey.split('.').length >= 3) {
                         try {
                             const metafieldValues = JSON.parse(value);
 
-                            // Parse each metafield value
                             for (const metafieldValue of metafieldValues) {
                                 const parsedMetafield = JSON.parse(metafieldValue);
                                 if (parsedMetafield.productMetafield) {
@@ -279,122 +299,102 @@ export function createCollectionAPI(storefront) {
                             console.error(`Error parsing metafield filter ${key}:`, e);
                         }
                     }
-                    // Handle normal product filters
-                    else if (filterParts[0] === 'v') {
-                        if (filterParts[1] === 'availability') {
-                            // Handle availability filter
-                            try {
-                                const availabilityValues = JSON.parse(value);
-                                for (const availabilityValue of availabilityValues) {
-                                    const parsed = JSON.parse(availabilityValue);
-                                    if (parsed.available !== undefined) {
-                                        filters.push({
-                                            available: parsed.available
-                                        });
-                                    }
-                                }
-                            } catch (e) {
-                                console.error(`Error parsing availability filter ${key}:`, e);
-                            }
-                        } else if (filterParts[1] === 'price') {
-                            // Handle price filter
-                            try {
-                                const priceValues = JSON.parse(value);
-                                for (const priceValue of priceValues) {
-                                    const parsed = JSON.parse(priceValue);
-                                    if (parsed.price) {
-                                        filters.push({
-                                            price: {
-                                                min: parseFloat(parsed.price.min),
-                                                max: parseFloat(parsed.price.max)
-                                            }
-                                        });
-                                    }
-                                }
-                            } catch (e) {
-                                console.error(`Error parsing price filter ${key}:`, e);
-                            }
-                        } else if (filterParts[1] === 'vendor') {
-                            // Handle vendor filter
-                            try {
-                                const vendorValues = JSON.parse(value);
-                                const vendors = [];
+                    // Handle availability filter
+                    else if (filterKey === 'v.availability') {
+                        try {
+                            const availabilityValues = JSON.parse(value);
 
-                                for (const vendorValue of vendorValues) {
-                                    try {
-                                        const parsed = JSON.parse(vendorValue);
-                                        if (parsed.productVendor) {
-                                            vendors.push(...(Array.isArray(parsed.productVendor) ? parsed.productVendor : [parsed.productVendor]));
-                                        }
-                                    } catch (e) {
-                                        vendors.push(vendorValue);
-                                    }
-                                }
+                            for (const availabilityValue of availabilityValues) {
+                                const parsed = JSON.parse(availabilityValue);
 
-                                if (vendors.length > 0) {
+                                if (parsed.available !== undefined) {
                                     filters.push({
-                                        productVendor: vendors
+                                        available: parsed.available
                                     });
                                 }
-                            } catch (e) {
-                                console.error(`Error parsing vendor filter ${key}:`, e);
                             }
-                        } else if (filterParts[1] === 'type') {
-                            // Handle product type filter
-                            try {
-                                const typeValues = JSON.parse(value);
-                                const types = [];
+                        } catch (e) {
+                            console.error(`Error parsing availability filter ${key}:`, e);
+                        }
+                    }
+                    // Handle vendor filter
+                    else if (filterKey === 'v.vendor') {
+                        try {
+                            const vendorValues = JSON.parse(value);
+                            const vendors = [];
 
-                                for (const typeValue of typeValues) {
-                                    try {
-                                        const parsed = JSON.parse(typeValue);
-                                        if (parsed.productType) {
-                                            types.push(...(Array.isArray(parsed.productType) ? parsed.productType : [parsed.productType]));
-                                        }
-                                    } catch (e) {
-                                        types.push(typeValue);
+                            for (const vendorValue of vendorValues) {
+                                try {
+                                    const parsed = JSON.parse(vendorValue);
+                                    if (parsed.productVendor) {
+                                        vendors.push(...(Array.isArray(parsed.productVendor) ? parsed.productVendor : [parsed.productVendor]));
                                     }
+                                } catch (e) {
+                                    vendors.push(vendorValue);
                                 }
-
-                                if (types.length > 0) {
-                                    filters.push({
-                                        productType: types
-                                    });
-                                }
-                            } catch (e) {
-                                console.error(`Error parsing type filter ${key}:`, e);
                             }
-                        } else if (filterParts[1] === 'tag') {
-                            // Handle tag filter
-                            try {
-                                const tagValues = JSON.parse(value);
-                                const tags = [];
 
-                                for (const tagValue of tagValues) {
-                                    try {
-                                        const parsed = JSON.parse(tagValue);
-                                        if (parsed.tag) {
-                                            tags.push(...(Array.isArray(parsed.tag) ? parsed.tag : [parsed.tag]));
-                                        }
-                                    } catch (e) {
-                                        tags.push(tagValue);
+                            if (vendors.length > 0) {
+                                filters.push({
+                                    productVendor: vendors
+                                });
+                            }
+                        } catch (e) {
+                            console.error(`Error parsing vendor filter ${key}:`, e);
+                        }
+                    }
+                    // Handle product type filter
+                    else if (filterKey === 'v.type') {
+                        try {
+                            const typeValues = JSON.parse(value);
+                            const types = [];
+
+                            for (const typeValue of typeValues) {
+                                try {
+                                    const parsed = JSON.parse(typeValue);
+                                    if (parsed.productType) {
+                                        types.push(...(Array.isArray(parsed.productType) ? parsed.productType : [parsed.productType]));
                                     }
+                                } catch (e) {
+                                    types.push(typeValue);
                                 }
-
-                                if (tags.length > 0) {
-                                    filters.push({
-                                        tag: tags
-                                    });
-                                }
-                            } catch (e) {
-                                console.error(`Error parsing tag filter ${key}:`, e);
                             }
-                        } else {
-                            // Unknown filter type
-                            console.log(`Unhandled v. filter type: ${key}, value: ${value}`);
+
+                            if (types.length > 0) {
+                                filters.push({
+                                    productType: types
+                                });
+                            }
+                        } catch (e) {
+                            console.error(`Error parsing type filter ${key}:`, e);
+                        }
+                    }
+                    // Handle tag filter
+                    else if (filterKey === 'v.tag') {
+                        try {
+                            const tagValues = JSON.parse(value);
+                            const tags = [];
+
+                            for (const tagValue of tagValues) {
+                                try {
+                                    const parsed = JSON.parse(tagValue);
+                                    if (parsed.tag) {
+                                        tags.push(...(Array.isArray(parsed.tag) ? parsed.tag : [parsed.tag]));
+                                    }
+                                } catch (e) {
+                                    tags.push(tagValue);
+                                }
+                            }
+
+                            if (tags.length > 0) {
+                                filters.push({
+                                    tag: tags
+                                });
+                            }
+                        } catch (e) {
+                            console.error(`Error parsing tag filter ${key}:`, e);
                         }
                     } else {
-                        // For all other filter types
                         console.log(`Unhandled filter type: ${key}, value: ${value}`);
                     }
                 } catch (e) {
