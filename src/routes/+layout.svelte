@@ -48,8 +48,6 @@
                     });
                 }
 
-                // Initialize wishlist
-                initWishlist(shopifyAPI);
             } catch (err) {
                 console.error('Error initializing client storefront:', err);
             }
@@ -105,9 +103,6 @@
             </ul>
 
             <div class="right-menu">
-                {#if MULTILINGUAL}
-                    <LocaleSwitcher />
-                {/if}
 
                 <!-- Account links -->
                 <div class="account-menu">
@@ -139,6 +134,9 @@
 
     <footer>
         <p>&copy; {new Date().getFullYear()} Shopify Store. All rights reserved.</p>
+        {#if MULTILINGUAL}
+            <LocaleSwitcher />
+        {/if}
     </footer>
 
     <!-- Cart component -->
@@ -150,109 +148,39 @@
         display: flex;
         flex-direction: column;
         min-height: 100vh;
+        max-width: 1400px;
+        margin: 0 auto;
     }
-
-    header {
-        padding: 1rem;
-        background-color: #f9f9f9;
-        border-bottom: 1px solid #eaeaea;
-    }
-
-    nav {
+    nav{
         display: flex;
         justify-content: space-between;
         align-items: center;
-        max-width: 1200px;
-        margin: 0 auto;
-        width: 100%;
     }
-
-    .logo a {
-        font-size: 1.5rem;
-        font-weight: bold;
-        text-decoration: none;
-        color: #333;
+    nav > div{
+        flex: 1;
     }
-
-    .menu {
+    nav > ul{
+        flex: 3;
         display: flex;
+        justify-content: center;
         list-style: none;
-        margin: 0;
-        padding: 0;
     }
-
-    .menu li {
-        margin: 0 1rem;
-    }
-
-    .menu a {
+    nav > ul > li > a{
+        padding: 5px 10px;
+        color: black;
         text-decoration: none;
-        color: #333;
     }
-
-    .right-menu {
+    nav > ul > li > a:hover{
+        text-decoration: underline;
+    }
+    nav > div:last-child {
         display: flex;
-        align-items: center;
-        gap: 1rem;
+        justify-content: flex-end;
+        gap: 20px;
     }
-
-    .account-menu {
-        margin-right: 0.5rem;
-    }
-
-    .account-link {
-        text-decoration: none;
-        color: #333;
-    }
-
-    .cart-button {
+    button {
         background: none;
         border: none;
         cursor: pointer;
-        position: relative;
-        padding: 0.5rem;
-        font-size: 1.25rem;
-    }
-
-    .cart-count {
-        position: absolute;
-        top: 0;
-        right: 0;
-        background-color: #e53e3e;
-        color: white;
-        border-radius: 50%;
-        width: 20px;
-        height: 20px;
-        font-size: 0.75rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .cart-link {
-        text-decoration: none;
-        color: #333;
-        display: none;
-    }
-
-    @media (min-width: 768px) {
-        .cart-link {
-            display: block;
-        }
-    }
-
-    main {
-        flex: 1;
-        padding: 2rem;
-        max-width: 1200px;
-        margin: 0 auto;
-        width: 100%;
-    }
-
-    footer {
-        padding: 2rem;
-        background-color: #f9f9f9;
-        border-top: 1px solid #eaeaea;
-        text-align: center;
     }
 </style>

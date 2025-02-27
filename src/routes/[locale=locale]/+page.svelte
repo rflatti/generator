@@ -2,6 +2,8 @@
     import { i18n } from '$lib/i18n/translations';
     import { createProductAPI } from '$lib/api/product';
     import { createCollectionAPI } from '$lib/api/collection';
+    import CollectionCard from "$lib/components/CollectionCard.svelte";
+    import ProductCard from "$lib/components/ProductCard.svelte";
 
     export let data;
 
@@ -30,26 +32,7 @@
 
     <div class="collection-grid">
         {#each featuredCollections as collection}
-            <div class="collection-card">
-                {#if collection.image}
-                    <div class="collection-image">
-                        <img
-                                src={collection.image.url}
-                                alt={collection.image.altText || collection.title}
-                                width={collection.image.width}
-                                height={collection.image.height}
-                                loading="lazy"
-                        />
-                    </div>
-                {/if}
-
-                <div class="collection-info">
-                    <h3>{collection.title}</h3>
-                    <a href="{data.locale ? `/${data.locale.country}-${data.locale.language}` : ''}/collections/{collection.handle}">
-                        {t('collections.viewCollection')}
-                    </a>
-                </div>
-            </div>
+            <CollectionCard collection={collection} data={data} />
         {/each}
     </div>
 </section>
@@ -59,29 +42,7 @@
 
     <div class="product-grid">
         {#each featuredProducts as product}
-            <div class="product-card">
-                {#if product.variants.nodes[0]?.image}
-                    <div class="product-image">
-                        <img
-                                src={product.variants.nodes[0].image.url}
-                                alt={product.variants.nodes[0].image.altText || product.title}
-                                width={product.variants.nodes[0].image.width}
-                                height={product.variants.nodes[0].image.height}
-                                loading="lazy"
-                        />
-                    </div>
-                {/if}
-
-                <div class="product-info">
-                    <h3>{product.title}</h3>
-                    <p class="product-price">
-                        {product.variants.nodes[0]?.price?.amount} {product.variants.nodes[0]?.price?.currencyCode}
-                    </p>
-                    <a href="{data.locale ? `/${data.locale.country}-${data.locale.language}` : ''}/products/{product.handle}">
-                        {t('products.viewProduct')}
-                    </a>
-                </div>
-            </div>
+            <ProductCard product={product} data={data} />
         {/each}
     </div>
 </section>
@@ -121,65 +82,5 @@
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
         gap: 2rem;
-    }
-
-    .collection-card,
-    .product-card {
-        border: 1px solid #eaeaea;
-        border-radius: 8px;
-        overflow: hidden;
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
-
-    .collection-card:hover,
-    .product-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-    }
-
-    .collection-image,
-    .product-image {
-        aspect-ratio: 16 / 9;
-        overflow: hidden;
-    }
-
-    .collection-image img,
-    .product-image img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        transition: transform 0.3s;
-    }
-
-    .collection-card:hover .collection-image img,
-    .product-card:hover .product-image img {
-        transform: scale(1.05);
-    }
-
-    .collection-info,
-    .product-info {
-        padding: 1rem;
-    }
-
-    .collection-info h3,
-    .product-info h3 {
-        font-size: 1.2rem;
-        margin-bottom: 0.5rem;
-    }
-
-    .product-price {
-        font-weight: bold;
-        margin-bottom: 0.5rem;
-    }
-
-    a {
-        display: inline-block;
-        margin-top: 0.5rem;
-        color: #0070f3;
-        text-decoration: none;
-    }
-
-    a:hover {
-        text-decoration: underline;
     }
 </style>

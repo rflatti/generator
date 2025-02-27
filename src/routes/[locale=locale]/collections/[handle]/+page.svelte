@@ -5,6 +5,7 @@
     import { formatMoney, isDiscounted } from '$lib/utils/money';
     import { generateCollectionSeo } from '$lib/utils/seo';
     import { onMount } from 'svelte';
+    import ProductCard from "$lib/components/ProductCard.svelte";
 
     export let data;
 
@@ -343,7 +344,7 @@
                     {#each products as product}
                         {@const variant = product.variants.nodes[0] || {}}
                         {@const hasDiscount = isDiscounted(variant.price, variant.compareAtPrice)}
-
+                        
                         <a
                                 href={`/${data.locale.country}-${data.locale.language}/products/${product.handle}`}
                                 class="product-card"

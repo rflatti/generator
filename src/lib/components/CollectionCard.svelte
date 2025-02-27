@@ -1,36 +1,32 @@
 <script>
     import { i18n } from '$lib/i18n/translations';
     $: t = $i18n.t;
+    export let collection;
     export let data;
-    export let product;
 </script>
-
-<div class="product-card">
-    {#if product.variants.nodes[0]?.image}
-        <div class="product-image">
+<div class="collection-card">
+    {#if collection.image}
+        <div class="collection-image">
             <img
-                    src={product.variants.nodes[0].image.url}
-                    alt={product.variants.nodes[0].image.altText || product.title}
-                    width={product.variants.nodes[0].image.width}
-                    height={product.variants.nodes[0].image.height}
+                    src={collection.image.url}
+                    alt={collection.image.altText || collection.title}
+                    width={collection.image.width}
+                    height={collection.image.height}
                     loading="lazy"
             />
         </div>
     {/if}
 
-    <div class="product-info">
-        <h3>{product.title}</h3>
-        <p class="product-price">
-            {product.variants.nodes[0]?.price?.amount} {product.variants.nodes[0]?.price?.currencyCode}
-        </p>
-        <a href="{data.locale ? `/${data.locale.country}-${data.locale.language}` : ''}/products/{product.handle}">
-            {t('products.viewProduct')}
+    <div class="collection-info">
+        <h3>{collection?.title}</h3>
+        <a href="{data.locale ? `/${data.locale.country}-${data.locale.language}` : ''}/collections/{collection.handle}">
+            {t('collections.viewCollection')}
         </a>
     </div>
 </div>
 <style>
-    .product-card {
-        width: 100%;
+    .collection-card {
+        max-width: 300px;
         margin: 0 auto;
         background-color: #ffffff;
         border-radius: 8px;
@@ -39,18 +35,18 @@
         transition: all 0.3s ease;
     }
 
-    .product-card:hover {
+    .collection-card:hover {
         box-shadow: 0 6px 8px rgba(0, 0, 0, 0.1);
     }
 
-    .product-image {
+    .collection-image {
         position: relative;
         width: 100%;
         padding-top: 100%; /* 1:1 aspect ratio */
         overflow: hidden;
     }
 
-    .product-image img {
+    .collection-image img {
         position: absolute;
         top: 0;
         left: 0;
@@ -60,17 +56,17 @@
         transition: transform 0.3s ease;
     }
 
-    .product-card:hover .product-image img {
+    .collection-card:hover .collection-image img {
         transform: scale(1.05);
     }
 
-    .product-info {
+    .collection-info {
         padding: 16px;
         text-align: left;
     }
 
-    .product-info h3 {
-        margin: 0 0 8px 0;
+    .collection-info h3 {
+        margin: 0 0 12px 0;
         font-size: 1.1rem;
         color: #333;
         white-space: nowrap;
@@ -78,13 +74,7 @@
         text-overflow: ellipsis;
     }
 
-    .product-price {
-        margin: 0 0 12px 0;
-        font-size: 0.9rem;
-        color: #666;
-    }
-
-    .view-product {
+    .view-collection {
         display: inline-block;
         padding: 8px 16px;
         background-color: #333;
@@ -95,7 +85,7 @@
         transition: background-color 0.3s ease;
     }
 
-    .view-product:hover {
+    .view-collection:hover {
         background-color: #555;
     }
 </style>
