@@ -8,7 +8,6 @@
     import { createCustomerAPI, customerTokenGetDefault, customerTokenSetDefault, customerTokenRemoveDefault } from '$lib/api/customer';
     import { createCustomerMetafieldsAPI } from '$lib/api/customer-metafields';
     import { createCustomerHelper, isLoggedIn } from '$lib/stores/customer';
-    import { wishlistCount, initWishlist } from '$lib/stores/wishlist';
     import LocaleSwitcher from '$lib/components/LocaleSwitcher.svelte';
     import Cart from '$lib/components/Cart.svelte';
     import { cartQuantity, openCart } from '$lib/stores/cart';
@@ -109,13 +108,7 @@
                 {#if MULTILINGUAL}
                     <LocaleSwitcher />
                 {/if}
-                <!-- Wishlist link -->
-                <a href={MULTILINGUAL ? `/${data.locale.country}-${data.locale.language}/account/wishlist` : '/account/wishlist'} class="wishlist-link">
-                    <span class="wishlist-icon">❤️</span>
-                    {#if $wishlistCount > 0}
-                        <span class="wishlist-count">{$wishlistCount}</span>
-                    {/if}
-                </a>
+
                 <!-- Account links -->
                 <div class="account-menu">
                     {#if $isLoggedIn}
